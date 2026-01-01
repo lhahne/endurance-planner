@@ -199,28 +199,24 @@ endurance-planner/
 ├── README.md               # Project description
 ├── LICENSE                 # MIT License
 ├── CLAUDE.md              # This file (AI assistant documentation)
+├── .gitignore             # Git ignore rules
 ├── src/
-│   ├── main.rs            # Application entry point
-│   ├── lib.rs             # Library root (if creating a library)
-│   ├── app.rs             # Main application state and logic
-│   ├── ui/                # UI components and rendering
-│   │   ├── mod.rs         # UI module exports
-│   │   └── components/    # Reusable UI components
-│   ├── event.rs           # Event handling (keyboard, mouse)
-│   ├── models/            # Data models and domain logic
-│   └── utils/             # Utility functions
-├── tests/                 # Integration tests
-│   └── integration_test.rs
+│   ├── main.rs            # Application entry point and event handling
+│   ├── app.rs             # Application state, screens, and logic
+│   ├── ui.rs              # Ratatui UI rendering for all screens
+│   ├── models.rs          # Data models (Distance, RaceType, Workout, etc.)
+│   └── file_io.rs         # Markdown save/load functionality
 └── target/                # Build artifacts (not committed to git)
 ```
 
 ### Key Files
 
-- **Cargo.toml**: Defines project metadata, dependencies, and build configuration
-- **src/main.rs**: Entry point, initializes terminal and runs event loop
-- **src/app.rs**: Application state, business logic, and state transitions
-- **src/ui/**: Ratatui rendering logic and UI components
-- **src/event.rs**: Terminal event handling (keyboard input, terminal resize, etc.)
+- **Cargo.toml**: Project manifest with ratatui and crossterm dependencies
+- **src/main.rs**: Entry point, terminal setup, and keyboard input handlers
+- **src/app.rs**: Application state, screen navigation, plan generation
+- **src/ui.rs**: Ratatui rendering for all screens (welcome, inputs, plan view, save/load/edit)
+- **src/models.rs**: Domain models - Distance, RaceType, RPE, HeartRateZones, Workout, TrainingPlan
+- **src/file_io.rs**: Markdown serialization/deserialization for training plans
 
 ## Development Workflow for AI Assistants
 
@@ -252,20 +248,43 @@ When starting work on this project:
 ## Domain-Specific Knowledge
 
 ### Endurance Training Concepts
-*To be documented as domain knowledge is implemented*
 
-Potential areas to cover:
-- Training zones and intensity levels
-- Periodization and training phases
-- Volume and intensity metrics
-- Recovery and adaptation
-- Performance testing and benchmarking
+**Maffetone Method (MAF)**
+- Maximum Aerobic Function heart rate = 180 - age
+- Zone 1 (Recovery): MAF-20 to MAF-10 bpm
+- Zone 2 (Aerobic Base): MAF-10 to MAF bpm
+- Used for all easy/long runs to build aerobic base
+
+**RPE (Rate of Perceived Exertion)**
+- Scale of 1-10 for subjective effort
+- Used for interval and tempo workouts
+- RPE 6: Tempo pace (comfortably hard)
+- RPE 7-8: Interval pace (hard to very hard)
+
+**Periodization Phases**
+- Base (40%): Aerobic foundation, easy runs
+- Build (30%): Introduce intervals and tempo
+- Peak (20%): Quality workouts, race-specific
+- Taper (10%): Reduced volume, maintain intensity
 
 ### Data Models
-*To be documented as data structures are defined*
 
-### Business Logic
-*To be documented as core functionality is implemented*
+- **Distance**: 5K, 10K, Half Marathon, Marathon, 50K, 100K, 100 Miles
+- **RaceType**: Road, Trail (affects workout selection)
+- **WorkoutType**: EasyRun, LongRun, RecoveryRun, Intervals, TempoRun, HillRepeats, TechnicalTrail, VerticalTraining, Rest
+- **TrainingPlan**: Contains UserProfile, HeartRateZones, and weekly schedule
+
+### Application Features
+
+**Keyboard Shortcuts**
+- Welcome: `Enter` (new plan), `l` (load), `q` (quit)
+- Plan View: `Up/Down` (weeks), `Left/Right` (workouts), `e` (edit), `s` (save), `l` (load), `q` (quit)
+- Input Screens: `Enter` (confirm), `Esc` (back), `Up/Down` (select)
+
+**File Operations**
+- Plans saved as human-readable Markdown files
+- Can be edited externally and reloaded
+- Workout descriptions editable in-app
 
 ## Common Cargo Commands
 

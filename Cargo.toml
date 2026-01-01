@@ -1,0 +1,11 @@
+[package]
+name = "endurance-planner"
+version = "0.1.0"
+edition = "2021"
+description = "Endurance training program planner using Maffetone method"
+license = "MIT"
+authors = ["Lauri Hahne"]
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
