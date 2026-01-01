@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+
+use crate::file_io::{load_plan_from_markdown, save_plan_to_markdown};
 use crate::models::{
     Distance, HeartRateZones, RaceType, TrainingPhase, TrainingPlan, TrainingWeek, UserProfile,
     Workout, WorkoutType, RPE,
@@ -12,6 +15,9 @@ pub enum Screen {
     RaceTypeSelect,
     WorkoutsPerWeekSelect,
     PlanView,
+    SavePlan,
+    LoadPlan,
+    EditWorkout,
 }
 
 /// Application state
@@ -28,6 +34,15 @@ pub struct App {
     // Generated plan
     pub training_plan: Option<TrainingPlan>,
     pub selected_week: usize,
+    pub selected_workout: usize,
+
+    // File operations
+    pub file_path_input: String,
+    pub status_message: Option<(String, bool)>, // (message, is_error)
+
+    // Edit mode
+    pub edit_buffer: String,
+    pub edit_cursor: usize,
 }
 
 impl App {
@@ -41,10 +56,16 @@ impl App {
             selected_workouts_per_week: 4,
             training_plan: None,
             selected_week: 0,
+            selected_workout: 0,
+            file_path_input: String::new(),
+            status_message: None,
+            edit_buffer: String::new(),
+            edit_cursor: 0,
         }
     }
 
     pub fn next_screen(&mut self) {
+        self.status_message = None;
         self.screen = match self.screen {
             Screen::Welcome => Screen::AgeInput,
             Screen::AgeInput => {
@@ -61,10 +82,14 @@ impl App {
                 Screen::PlanView
             }
             Screen::PlanView => Screen::PlanView,
+            Screen::SavePlan => Screen::SavePlan,
+            Screen::LoadPlan => Screen::LoadPlan,
+            Screen::EditWorkout => Screen::EditWorkout,
         };
     }
 
     pub fn previous_screen(&mut self) {
+        self.status_message = None;
         self.screen = match self.screen {
             Screen::Welcome => Screen::Welcome,
             Screen::AgeInput => Screen::Welcome,
@@ -72,7 +97,138 @@ impl App {
             Screen::RaceTypeSelect => Screen::DistanceSelect,
             Screen::WorkoutsPerWeekSelect => Screen::RaceTypeSelect,
             Screen::PlanView => Screen::WorkoutsPerWeekSelect,
+            Screen::SavePlan => Screen::PlanView,
+            Screen::LoadPlan => Screen::Welcome,
+            Screen::EditWorkout => Screen::PlanView,
         };
+    }
+
+    pub fn go_to_save(&mut self) {
+        if self.training_plan.is_some() {
+            self.file_path_input = "training_plan.md".to_string();
+            self.status_message = None;
+            self.screen = Screen::SavePlan;
+        }
+    }
+
+    pub fn go_to_load(&mut self) {
+        self.file_path_input.clear();
+        self.status_message = None;
+        self.screen = Screen::LoadPlan;
+    }
+
+    pub fn go_to_edit(&mut self) {
+        if let Some(plan) = &self.training_plan {
+            if let Some(week) = plan.weeks.get(self.selected_week) {
+                if let Some(workout) = week.workouts.get(self.selected_workout) {
+                    self.edit_buffer = workout.description.clone();
+                    self.edit_cursor = self.edit_buffer.len();
+                    self.screen = Screen::EditWorkout;
+                }
+            }
+        }
+    }
+
+    pub fn save_plan(&mut self) {
+        if self.file_path_input.is_empty() {
+            self.status_message = Some(("Please enter a file path".to_string(), true));
+            return;
+        }
+
+        if let Some(plan) = &self.training_plan {
+            let path = PathBuf::from(&self.file_path_input);
+            match save_plan_to_markdown(plan, &path) {
+                Ok(()) => {
+                    self.status_message =
+                        Some((format!("Plan saved to {}", self.file_path_input), false));
+                }
+                Err(e) => {
+                    self.status_message = Some((format!("Error saving: {}", e), true));
+                }
+            }
+        }
+    }
+
+    pub fn load_plan(&mut self) {
+        if self.file_path_input.is_empty() {
+            self.status_message = Some(("Please enter a file path".to_string(), true));
+            return;
+        }
+
+        let path = PathBuf::from(&self.file_path_input);
+        match load_plan_from_markdown(&path) {
+            Ok(plan) => {
+                self.training_plan = Some(plan);
+                self.selected_week = 0;
+                self.selected_workout = 0;
+                self.status_message = Some(("Plan loaded successfully".to_string(), false));
+                self.screen = Screen::PlanView;
+            }
+            Err(e) => {
+                self.status_message = Some((format!("Error loading: {}", e), true));
+            }
+        }
+    }
+
+    pub fn apply_edit(&mut self) {
+        if let Some(plan) = &mut self.training_plan {
+            if let Some(week) = plan.weeks.get_mut(self.selected_week) {
+                if let Some(workout) = week.workouts.get_mut(self.selected_workout) {
+                    workout.description = self.edit_buffer.clone();
+                }
+            }
+        }
+        self.screen = Screen::PlanView;
+    }
+
+    pub fn select_next_workout(&mut self) {
+        if let Some(plan) = &self.training_plan {
+            if let Some(week) = plan.weeks.get(self.selected_week) {
+                let active_workouts: Vec<usize> = week
+                    .workouts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, w)| w.duration_minutes > 0)
+                    .map(|(i, _)| i)
+                    .collect();
+
+                if let Some(pos) = active_workouts
+                    .iter()
+                    .position(|&i| i == self.selected_workout)
+                {
+                    if pos + 1 < active_workouts.len() {
+                        self.selected_workout = active_workouts[pos + 1];
+                    }
+                } else if !active_workouts.is_empty() {
+                    self.selected_workout = active_workouts[0];
+                }
+            }
+        }
+    }
+
+    pub fn select_prev_workout(&mut self) {
+        if let Some(plan) = &self.training_plan {
+            if let Some(week) = plan.weeks.get(self.selected_week) {
+                let active_workouts: Vec<usize> = week
+                    .workouts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, w)| w.duration_minutes > 0)
+                    .map(|(i, _)| i)
+                    .collect();
+
+                if let Some(pos) = active_workouts
+                    .iter()
+                    .position(|&i| i == self.selected_workout)
+                {
+                    if pos > 0 {
+                        self.selected_workout = active_workouts[pos - 1];
+                    }
+                } else if !active_workouts.is_empty() {
+                    self.selected_workout = active_workouts[0];
+                }
+            }
+        }
     }
 
     fn validate_age(&self) -> bool {
@@ -129,6 +285,7 @@ impl App {
     pub fn scroll_plan_up(&mut self) {
         if self.selected_week > 0 {
             self.selected_week -= 1;
+            self.selected_workout = 0;
         }
     }
 
@@ -136,6 +293,7 @@ impl App {
         if let Some(plan) = &self.training_plan {
             if self.selected_week < plan.weeks.len().saturating_sub(1) {
                 self.selected_week += 1;
+                self.selected_workout = 0;
             }
         }
     }
