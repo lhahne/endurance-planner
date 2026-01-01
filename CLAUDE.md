@@ -23,7 +23,19 @@ This project aims to provide tools and utilities for endurance athletes to plan,
 - `CLAUDE.md` - This file (AI assistant documentation)
 
 ### Technology Stack
-*To be determined - Stack will be established as development progresses*
+
+**Primary Language:** Rust
+**UI Framework:** [Ratatui](https://ratatui.rs/) - Terminal User Interface library
+
+#### Core Dependencies
+- **ratatui** - TUI framework for building rich terminal interfaces
+- **crossterm** - Cross-platform terminal manipulation (backend for ratatui)
+
+#### Development Tools
+- **rustc** - Rust compiler
+- **cargo** - Rust package manager and build tool
+- **rustfmt** - Code formatter
+- **clippy** - Linting tool
 
 ## Development Conventions
 
@@ -41,7 +53,36 @@ This project aims to provide tools and utilities for endurance athletes to plan,
 4. **Minimal Abstractions**: Don't create helpers, utilities, or abstractions for one-time operations.
 
 #### Code Organization
-*To be established as codebase grows*
+
+**Rust-Specific Conventions:**
+1. **Module Structure:**
+   - Use `mod.rs` or single-file modules based on complexity
+   - Keep modules focused and cohesive
+   - Use `pub` visibility sparingly - prefer private by default
+
+2. **Naming Conventions:**
+   - `snake_case` for functions, variables, modules, and fields
+   - `PascalCase` for types, traits, and enums
+   - `SCREAMING_SNAKE_CASE` for constants and statics
+   - Prefix predicates with `is_`, `has_`, `can_`, etc.
+
+3. **Error Handling:**
+   - Use `Result<T, E>` for recoverable errors
+   - Use `Option<T>` for nullable values
+   - Prefer `?` operator over explicit match/unwrap
+   - Create custom error types for domain-specific errors
+   - Only use `unwrap()` or `expect()` when certain value exists
+
+4. **Code Style:**
+   - Run `cargo fmt` before committing
+   - Run `cargo clippy` and address warnings
+   - Follow Rust API Guidelines: https://rust-lang.github.io/api-guidelines/
+
+5. **TUI-Specific Patterns:**
+   - Separate UI rendering from business logic
+   - Use the Component pattern for reusable UI elements
+   - Keep state management separate from rendering
+   - Handle terminal events in dedicated event loop
 
 ### Git Workflow
 
@@ -95,7 +136,45 @@ This project aims to provide tools and utilities for endurance athletes to plan,
 
 ### Testing Standards
 
-*To be established as testing framework is implemented*
+**Rust Testing Patterns:**
+
+1. **Unit Tests:**
+   - Place tests in the same file within `#[cfg(test)]` module
+   - Use `#[test]` attribute for test functions
+   - Run with `cargo test`
+   - Example:
+     ```rust
+     #[cfg(test)]
+     mod tests {
+         use super::*;
+
+         #[test]
+         fn test_function_name() {
+             // Test implementation
+         }
+     }
+     ```
+
+2. **Integration Tests:**
+   - Place in `tests/` directory at project root
+   - Each file is compiled as separate crate
+   - Test public API only
+
+3. **Documentation Tests:**
+   - Include examples in doc comments
+   - Automatically tested with `cargo test`
+   - Use `///` for function docs with examples
+
+4. **Test Organization:**
+   - Use `assert!`, `assert_eq!`, `assert_ne!` for assertions
+   - Use `#[should_panic]` for expected panic tests
+   - Use `Result<(), E>` for tests that can return errors
+
+5. **Running Tests:**
+   - `cargo test` - Run all tests
+   - `cargo test --lib` - Run only library tests
+   - `cargo test test_name` - Run specific test
+   - `cargo test -- --nocapture` - Show println! output
 
 ### Error Handling
 
@@ -111,16 +190,37 @@ This project aims to provide tools and utilities for endurance athletes to plan,
 
 ## Project Structure
 
-*This section will be updated as the project structure develops*
+### Standard Rust Project Layout
 
-### Planned Directories
 ```
 endurance-planner/
-├── README.md
-├── LICENSE
-├── CLAUDE.md
-└── [Additional structure to be determined]
+├── Cargo.toml              # Project manifest and dependencies
+├── Cargo.lock              # Dependency lock file (committed to git)
+├── README.md               # Project description
+├── LICENSE                 # MIT License
+├── CLAUDE.md              # This file (AI assistant documentation)
+├── src/
+│   ├── main.rs            # Application entry point
+│   ├── lib.rs             # Library root (if creating a library)
+│   ├── app.rs             # Main application state and logic
+│   ├── ui/                # UI components and rendering
+│   │   ├── mod.rs         # UI module exports
+│   │   └── components/    # Reusable UI components
+│   ├── event.rs           # Event handling (keyboard, mouse)
+│   ├── models/            # Data models and domain logic
+│   └── utils/             # Utility functions
+├── tests/                 # Integration tests
+│   └── integration_test.rs
+└── target/                # Build artifacts (not committed to git)
 ```
+
+### Key Files
+
+- **Cargo.toml**: Defines project metadata, dependencies, and build configuration
+- **src/main.rs**: Entry point, initializes terminal and runs event loop
+- **src/app.rs**: Application state, business logic, and state transitions
+- **src/ui/**: Ratatui rendering logic and UI components
+- **src/event.rs**: Terminal event handling (keyboard input, terminal resize, etc.)
 
 ## Development Workflow for AI Assistants
 
@@ -166,6 +266,33 @@ Potential areas to cover:
 
 ### Business Logic
 *To be documented as core functionality is implemented*
+
+## Common Cargo Commands
+
+### Building and Running
+- `cargo build` - Compile the project (debug mode)
+- `cargo build --release` - Compile with optimizations
+- `cargo run` - Build and run the application
+- `cargo run --release` - Build and run optimized version
+- `cargo check` - Check code for errors without building
+
+### Testing and Quality
+- `cargo test` - Run all tests
+- `cargo clippy` - Run linting checks
+- `cargo fmt` - Format code according to Rust style
+- `cargo fmt -- --check` - Check formatting without modifying files
+
+### Dependencies
+- `cargo add <crate>` - Add a dependency (requires cargo-edit)
+- `cargo update` - Update dependencies within semver constraints
+- `cargo tree` - Display dependency tree
+
+### Documentation
+- `cargo doc --open` - Generate and open documentation
+- `cargo doc --no-deps` - Generate docs without dependencies
+
+### Cleaning
+- `cargo clean` - Remove build artifacts
 
 ## Common Tasks & Patterns
 
@@ -226,11 +353,98 @@ Potential areas to cover:
 ## Resources & References
 
 ### External Documentation
+
+**Rust:**
+- The Rust Book: https://doc.rust-lang.org/book/
+- Rust by Example: https://doc.rust-lang.org/rust-by-example/
+- Rust API Guidelines: https://rust-lang.github.io/api-guidelines/
+- Rust Standard Library: https://doc.rust-lang.org/std/
+
+**Ratatui:**
+- Ratatui Documentation: https://ratatui.rs/
+- Ratatui GitHub: https://github.com/ratatui-org/ratatui
+- Ratatui Examples: https://github.com/ratatui-org/ratatui/tree/main/examples
+- Crossterm Documentation: https://docs.rs/crossterm/latest/crossterm/
+
+**Development Tools:**
+- Cargo Book: https://doc.rust-lang.org/cargo/
+- Clippy Lints: https://rust-lang.github.io/rust-clippy/
+
+**General:**
 - Git Documentation: https://git-scm.com/doc
 - Markdown Guide: https://www.markdownguide.org/
 
 ### Internal Documentation
 *Links to be added as documentation grows*
+
+## Ratatui TUI Development Patterns
+
+### Terminal Setup and Teardown
+
+Always ensure proper terminal cleanup:
+```rust
+// Initialize terminal
+let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
+terminal.clear()?;
+
+// Enable raw mode
+crossterm::terminal::enable_raw_mode()?;
+
+// ... run application ...
+
+// Always restore terminal state
+crossterm::terminal::disable_raw_mode()?;
+terminal.show_cursor()?;
+```
+
+### Event Loop Pattern
+
+Standard event loop structure:
+```rust
+loop {
+    // Render UI
+    terminal.draw(|frame| ui::render(frame, &app))?;
+
+    // Handle events
+    if event::poll(Duration::from_millis(100))? {
+        if let Event::Key(key) = event::read()? {
+            match key.code {
+                KeyCode::Char('q') => break,
+                // Handle other keys
+                _ => {}
+            }
+        }
+    }
+
+    // Update application state
+    app.update();
+}
+```
+
+### Component Pattern
+
+Structure UI components as composable functions:
+```rust
+pub fn render_component(frame: &mut Frame, area: Rect, state: &ComponentState) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title("Component Title");
+
+    frame.render_widget(block, area);
+}
+```
+
+### State Management
+
+- Keep UI state separate from business logic
+- Use message-passing or event-driven patterns for state updates
+- Implement clear state transition functions
+
+### Layout Best Practices
+
+- Use `Layout` for responsive terminal layouts
+- Calculate sizes based on available space
+- Handle terminal resize events gracefully
 
 ## Notes for AI Assistants
 
@@ -271,6 +485,11 @@ Potential areas to cover:
 - Initial CLAUDE.md creation
 - Established basic conventions and workflows
 - Documented repository initial state
+- Added Rust + Ratatui technology stack details
+- Documented Rust-specific code conventions and patterns
+- Added Cargo commands reference
+- Included Ratatui TUI development patterns
+- Added comprehensive resource links for Rust and Ratatui
 
 ---
 
