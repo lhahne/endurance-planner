@@ -171,7 +171,7 @@ fn generate_week_workouts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::MafAdjustment;
+    use crate::models::{Distance, MafAdjustment};
 
     #[test]
     fn test_generate_training_weeks_periodization() {

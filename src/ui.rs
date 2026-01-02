@@ -144,7 +144,6 @@ fn render_summary_panel(
         workouts_selected,
     ));
 
-
     lines.push(Line::from(""));
 
     // Duration (read-only, derived from distance)

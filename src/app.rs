@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use crate::file_io::{load_plan_from_markdown, save_plan_to_markdown};
-use crate::models::{
-    Distance, MafAdjustment, RaceType, TrainingPlan, UserProfile,
-};
+use crate::models::{Distance, MafAdjustment, RaceType, TrainingPlan, UserProfile};
 use crate::planner;
 
 /// Current screen in the application
