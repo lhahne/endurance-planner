@@ -401,6 +401,30 @@ pub fn update_workout_duration(
 mod tests {
     use super::*;
 
+    // Markdown conversion tests
+    #[test]
+    fn test_plan_to_markdown() {
+        let profile = UserProfile {
+            age: 35,
+            target_distance: Distance::Marathon,
+            race_type: RaceType::Road,
+            workouts_per_week: 5,
+        };
+        let hr_zones = HeartRateZones::from_age(35);
+        let plan = TrainingPlan {
+            profile,
+            hr_zones,
+            weeks: vec![],
+        };
+
+        let md = plan_to_markdown(&plan);
+        assert!(md.contains("# Endurance Training Plan"));
+        assert!(md.contains("Age:** 35"));
+        assert!(md.contains("Target Distance:** Marathon"));
+        assert!(md.contains("Race Type:** Road"));
+        assert!(md.contains("Workouts per Week:** 5"));
+    }
+
     #[test]
     fn test_markdown_roundtrip() {
         let profile = UserProfile {
@@ -441,5 +465,309 @@ mod tests {
         assert_eq!(parsed.profile.target_distance, Distance::Marathon);
         assert_eq!(parsed.profile.race_type, RaceType::Road);
         assert_eq!(parsed.weeks.len(), 1);
+    }
+
+    // Distance parsing tests
+    #[test]
+    fn test_extract_distance_5k() {
+        let lines = vec!["- **Target Distance:** 5K"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::FiveK);
+    }
+
+    #[test]
+    fn test_extract_distance_10k() {
+        let lines = vec!["- **Target Distance:** 10K"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::TenK);
+    }
+
+    #[test]
+    fn test_extract_distance_half_marathon() {
+        let lines = vec!["- **Target Distance:** Half Marathon (21.1K)"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::HalfMarathon);
+    }
+
+    #[test]
+    fn test_extract_distance_marathon() {
+        let lines = vec!["- **Target Distance:** Marathon (42.2K)"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::Marathon);
+    }
+
+    #[test]
+    fn test_extract_distance_50k() {
+        let lines = vec!["- **Target Distance:** 50K Ultra"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::FiftyK);
+    }
+
+    #[test]
+    fn test_extract_distance_100k() {
+        let lines = vec!["- **Target Distance:** 100K Ultra"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::HundredK);
+    }
+
+    #[test]
+    fn test_extract_distance_100_miles() {
+        let lines = vec!["- **Target Distance:** 100 Miles Ultra"];
+        let distance = extract_distance(&lines).unwrap();
+        assert_eq!(distance, Distance::HundredMiles);
+    }
+
+    #[test]
+    fn test_extract_distance_missing() {
+        let lines = vec!["- **Age:** 30"];
+        let result = extract_distance(&lines);
+        assert!(result.is_err());
+    }
+
+    // Race type parsing tests
+    #[test]
+    fn test_extract_race_type_road() {
+        let lines = vec!["- **Race Type:** Road"];
+        let race_type = extract_race_type(&lines).unwrap();
+        assert_eq!(race_type, RaceType::Road);
+    }
+
+    #[test]
+    fn test_extract_race_type_trail() {
+        let lines = vec!["- **Race Type:** Trail"];
+        let race_type = extract_race_type(&lines).unwrap();
+        assert_eq!(race_type, RaceType::Trail);
+    }
+
+    #[test]
+    fn test_extract_race_type_missing() {
+        let lines = vec!["- **Age:** 30"];
+        let result = extract_race_type(&lines);
+        assert!(result.is_err());
+    }
+
+    // Number extraction tests
+    #[test]
+    fn test_extract_number_age() {
+        let lines = vec!["- **Age:** 35"];
+        let age = extract_number(&lines, "Age:").unwrap();
+        assert_eq!(age, 35);
+    }
+
+    #[test]
+    fn test_extract_number_workouts() {
+        let lines = vec!["- **Workouts per Week:** 5"];
+        let workouts = extract_number(&lines, "Workouts per Week:").unwrap();
+        assert_eq!(workouts, 5);
+    }
+
+    #[test]
+    fn test_extract_number_with_bpm() {
+        let lines = vec!["- **MAF Heart Rate:** 145 bpm"];
+        let hr = extract_number(&lines, "MAF Heart Rate:").unwrap();
+        assert_eq!(hr, 145);
+    }
+
+    #[test]
+    fn test_extract_number_missing() {
+        let lines = vec!["- **Something:** else"];
+        let result = extract_number(&lines, "Age:");
+        assert!(result.is_err());
+    }
+
+    // Week header parsing tests
+    #[test]
+    fn test_parse_week_header() {
+        let line = "### Week 1 - Base Building (180 min total)";
+        let week = parse_week_header(line).unwrap();
+        assert_eq!(week.week_number, 1);
+        assert_eq!(week.phase, TrainingPhase::Base);
+        assert_eq!(week.total_volume_minutes, 180);
+    }
+
+    #[test]
+    fn test_parse_week_header_build() {
+        let line = "### Week 5 - Build Phase (240 min total)";
+        let week = parse_week_header(line).unwrap();
+        assert_eq!(week.week_number, 5);
+        assert_eq!(week.phase, TrainingPhase::Build);
+        assert_eq!(week.total_volume_minutes, 240);
+    }
+
+    #[test]
+    fn test_parse_week_header_peak() {
+        let line = "### Week 10 - Peak Training (300 min total)";
+        let week = parse_week_header(line).unwrap();
+        assert_eq!(week.week_number, 10);
+        assert_eq!(week.phase, TrainingPhase::Peak);
+    }
+
+    #[test]
+    fn test_parse_week_header_taper() {
+        let line = "### Week 16 - Taper (120 min total)";
+        let week = parse_week_header(line).unwrap();
+        assert_eq!(week.week_number, 16);
+        assert_eq!(week.phase, TrainingPhase::Taper);
+    }
+
+    // Day line parsing tests
+    #[test]
+    fn test_parse_day_line_with_duration() {
+        let line = "**Day 1:** Easy Run (45 min)";
+        let (name, duration) = parse_day_line(line).unwrap();
+        assert_eq!(name, "Easy Run");
+        assert_eq!(duration, 45);
+    }
+
+    #[test]
+    fn test_parse_day_line_rest() {
+        let line = "**Day 7:** Rest";
+        let (name, duration) = parse_day_line(line).unwrap();
+        assert_eq!(name, "Rest");
+        assert_eq!(duration, 0);
+    }
+
+    #[test]
+    fn test_parse_day_line_long_run() {
+        let line = "**Day 1:** Long Run (90 min)";
+        let (name, duration) = parse_day_line(line).unwrap();
+        assert_eq!(name, "Long Run");
+        assert_eq!(duration, 90);
+    }
+
+    // Workout type parsing tests
+    #[test]
+    fn test_parse_workout_type_easy_run() {
+        let wt = parse_workout_type("Easy Run");
+        assert_eq!(wt, WorkoutType::EasyRun);
+    }
+
+    #[test]
+    fn test_parse_workout_type_long_run() {
+        let wt = parse_workout_type("Long Run");
+        assert_eq!(wt, WorkoutType::LongRun);
+    }
+
+    #[test]
+    fn test_parse_workout_type_recovery_run() {
+        let wt = parse_workout_type("Recovery Run");
+        assert_eq!(wt, WorkoutType::RecoveryRun);
+    }
+
+    #[test]
+    fn test_parse_workout_type_intervals() {
+        let wt = parse_workout_type("Intervals");
+        match wt {
+            WorkoutType::Intervals { .. } => {},
+            _ => panic!("Expected Intervals"),
+        }
+    }
+
+    #[test]
+    fn test_parse_workout_type_tempo() {
+        let wt = parse_workout_type("Tempo Run");
+        match wt {
+            WorkoutType::TempoRun { .. } => {},
+            _ => panic!("Expected TempoRun"),
+        }
+    }
+
+    #[test]
+    fn test_parse_workout_type_hill_repeats() {
+        let wt = parse_workout_type("Hill Repeats");
+        match wt {
+            WorkoutType::HillRepeats { .. } => {},
+            _ => panic!("Expected HillRepeats"),
+        }
+    }
+
+    #[test]
+    fn test_parse_workout_type_technical_trail() {
+        let wt = parse_workout_type("Technical Trail");
+        assert_eq!(wt, WorkoutType::TechnicalTrail);
+    }
+
+    #[test]
+    fn test_parse_workout_type_vertical() {
+        let wt = parse_workout_type("Vertical Training");
+        match wt {
+            WorkoutType::VerticalTraining { .. } => {},
+            _ => panic!("Expected VerticalTraining"),
+        }
+    }
+
+    #[test]
+    fn test_parse_workout_type_unknown() {
+        let wt = parse_workout_type("Unknown Workout");
+        assert_eq!(wt, WorkoutType::Rest);
+    }
+
+    // Update workout tests
+    #[test]
+    fn test_update_workout() {
+        let mut plan = create_test_plan();
+        update_workout(&mut plan, 0, 0, "Updated description".to_string());
+        assert_eq!(plan.weeks[0].workouts[0].description, "Updated description");
+    }
+
+    #[test]
+    fn test_update_workout_duration() {
+        let mut plan = create_test_plan();
+        let old_volume = plan.weeks[0].total_volume_minutes;
+        update_workout_duration(&mut plan, 0, 0, 100);
+        assert_eq!(plan.weeks[0].workouts[0].duration_minutes, 100);
+        // Volume should be updated
+        assert_ne!(plan.weeks[0].total_volume_minutes, old_volume);
+    }
+
+    #[test]
+    fn test_update_workout_invalid_index() {
+        let mut plan = create_test_plan();
+        update_workout(&mut plan, 10, 0, "Won't update".to_string());
+        // Should not panic, just do nothing
+    }
+
+    // Error handling tests
+    #[test]
+    fn test_file_error_display_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let file_err = FileError::from(io_err);
+        let display = format!("{}", file_err);
+        assert!(display.contains("IO error"));
+    }
+
+    #[test]
+    fn test_file_error_display_parse() {
+        let file_err = FileError::ParseError("invalid format".to_string());
+        let display = format!("{}", file_err);
+        assert!(display.contains("Parse error"));
+        assert!(display.contains("invalid format"));
+    }
+
+    // Helper function
+    fn create_test_plan() -> TrainingPlan {
+        let profile = UserProfile {
+            age: 30,
+            target_distance: Distance::Marathon,
+            race_type: RaceType::Road,
+            workouts_per_week: 5,
+        };
+        let hr_zones = HeartRateZones::from_age(30);
+        TrainingPlan {
+            profile,
+            hr_zones,
+            weeks: vec![TrainingWeek {
+                week_number: 1,
+                phase: TrainingPhase::Base,
+                workouts: vec![
+                    Workout {
+                        workout_type: WorkoutType::EasyRun,
+                        duration_minutes: 45,
+                        description: "Test workout".to_string(),
+                    },
+                ],
+                total_volume_minutes: 45,
+            }],
+        }
     }
 }
