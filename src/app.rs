@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::file_io::{load_plan_from_markdown, save_plan_to_markdown};
 use crate::models::{
-    Distance, HeartRateZones, RaceType, TrainingPhase, TrainingPlan, TrainingWeek, UserProfile,
-    Workout, WorkoutType, RPE,
+    Distance, HeartRateZones, MafAdjustment, RaceType, TrainingPhase, TrainingPlan, TrainingWeek,
+    UserProfile, Workout, WorkoutType, RPE,
 };
 
 /// Current screen in the application
@@ -29,6 +29,7 @@ pub enum SummaryField {
     Distance,
     RaceType,
     WorkoutsPerWeek,
+    MafAdjustment,
 }
 
 impl SummaryField {
@@ -37,16 +38,18 @@ impl SummaryField {
             SummaryField::Age => SummaryField::Distance,
             SummaryField::Distance => SummaryField::RaceType,
             SummaryField::RaceType => SummaryField::WorkoutsPerWeek,
-            SummaryField::WorkoutsPerWeek => SummaryField::Age,
+            SummaryField::WorkoutsPerWeek => SummaryField::MafAdjustment,
+            SummaryField::MafAdjustment => SummaryField::Age,
         }
     }
 
     pub fn prev(self) -> SummaryField {
         match self {
-            SummaryField::Age => SummaryField::WorkoutsPerWeek,
+            SummaryField::Age => SummaryField::MafAdjustment,
             SummaryField::Distance => SummaryField::Age,
             SummaryField::RaceType => SummaryField::Distance,
             SummaryField::WorkoutsPerWeek => SummaryField::RaceType,
+            SummaryField::MafAdjustment => SummaryField::WorkoutsPerWeek,
         }
     }
 }
@@ -61,6 +64,7 @@ pub struct App {
     pub selected_distance_index: usize,
     pub selected_race_type_index: usize,
     pub selected_workouts_per_week: u8,
+    pub selected_maf_adjustment_index: usize,
 
     // Summary editing state
     pub plan_focus: PlanFocus,
@@ -89,6 +93,7 @@ impl App {
             selected_distance_index: 2,  // Half Marathon
             selected_race_type_index: 0, // Road
             selected_workouts_per_week: 4,
+            selected_maf_adjustment_index: 2, // MafAdjustment::None (index 2)
             plan_focus: PlanFocus::Summary,
             selected_summary_field: SummaryField::Age,
             training_plan: None,
@@ -142,6 +147,10 @@ impl App {
                 self.increase_workouts();
                 self.regenerate_plan();
             }
+            SummaryField::MafAdjustment => {
+                self.select_next_maf_adjustment();
+                self.regenerate_plan();
+            }
         }
     }
 
@@ -164,6 +173,10 @@ impl App {
             }
             SummaryField::WorkoutsPerWeek => {
                 self.decrease_workouts();
+                self.regenerate_plan();
+            }
+            SummaryField::MafAdjustment => {
+                self.select_prev_maf_adjustment();
                 self.regenerate_plan();
             }
         }
@@ -242,6 +255,10 @@ impl App {
                     .position(|r| *r == plan.profile.race_type)
                     .unwrap_or(0);
                 self.selected_workouts_per_week = plan.profile.workouts_per_week;
+                self.selected_maf_adjustment_index = MafAdjustment::all()
+                    .iter()
+                    .position(|a| *a == plan.profile.maf_adjustment)
+                    .unwrap_or(2); // Default to None (index 2)
 
                 self.training_plan = Some(plan);
                 self.selected_week = 0;
@@ -344,6 +361,20 @@ impl App {
         self.selected_race_type_index = (self.selected_race_type_index + len - 1) % len;
     }
 
+    pub fn selected_maf_adjustment(&self) -> MafAdjustment {
+        MafAdjustment::all()[self.selected_maf_adjustment_index]
+    }
+
+    pub fn select_next_maf_adjustment(&mut self) {
+        let len = MafAdjustment::all().len();
+        self.selected_maf_adjustment_index = (self.selected_maf_adjustment_index + 1) % len;
+    }
+
+    pub fn select_prev_maf_adjustment(&mut self) {
+        let len = MafAdjustment::all().len();
+        self.selected_maf_adjustment_index = (self.selected_maf_adjustment_index + len - 1) % len;
+    }
+
     pub fn increase_workouts(&mut self) {
         if self.selected_workouts_per_week < 7 {
             self.selected_workouts_per_week += 1;
@@ -378,9 +409,11 @@ impl App {
             target_distance: self.selected_distance(),
             race_type: self.selected_race_type(),
             workouts_per_week: self.selected_workouts_per_week,
+            maf_adjustment: self.selected_maf_adjustment(),
         };
 
-        let hr_zones = HeartRateZones::from_age(profile.age);
+        let hr_zones =
+            HeartRateZones::from_age_with_adjustment(profile.age, profile.maf_adjustment);
         let total_weeks = profile.target_distance.plan_weeks();
         let weeks = generate_training_weeks(&profile, &hr_zones, total_weeks);
 
@@ -757,10 +790,13 @@ mod tests {
         assert_eq!(app.selected_summary_field, SummaryField::WorkoutsPerWeek);
 
         app.select_next_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::MafAdjustment);
+
+        app.select_next_summary_field();
         assert_eq!(app.selected_summary_field, SummaryField::Age); // Wraps around
 
         app.select_prev_summary_field();
-        assert_eq!(app.selected_summary_field, SummaryField::WorkoutsPerWeek);
+        assert_eq!(app.selected_summary_field, SummaryField::MafAdjustment);
     }
 
     // Age field editing tests
@@ -1130,6 +1166,7 @@ mod tests {
             target_distance: Distance::Marathon,
             race_type: RaceType::Road,
             workouts_per_week: 5,
+            maf_adjustment: MafAdjustment::None,
         };
         let hr_zones = HeartRateZones::from_age(30);
         let weeks = generate_training_weeks(&profile, &hr_zones, 16);
@@ -1169,6 +1206,7 @@ mod tests {
             target_distance: Distance::HalfMarathon,
             race_type: RaceType::Road,
             workouts_per_week: 4,
+            maf_adjustment: MafAdjustment::None,
         };
         let hr_zones = HeartRateZones::from_age(35);
         let weeks = generate_training_weeks(&profile, &hr_zones, 12);

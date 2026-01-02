@@ -130,6 +130,64 @@ impl RPE {
     }
 }
 
+/// Maffetone Method adjustment factors based on fitness/health status
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum MafAdjustment {
+    /// -10: Recovering from major illness/surgery, on regular medication, or overtrained
+    MinusTen,
+    /// -5: Injured, regressed, >2 colds/year, allergies/asthma, or just starting
+    MinusFive,
+    /// 0: Training consistently for up to 2 years without problems
+    #[default]
+    None,
+    /// +5: Training consistently for more than 2 years, making progress without injury
+    PlusFive,
+}
+
+impl MafAdjustment {
+    pub fn all() -> &'static [MafAdjustment] {
+        &[
+            MafAdjustment::MinusTen,
+            MafAdjustment::MinusFive,
+            MafAdjustment::None,
+            MafAdjustment::PlusFive,
+        ]
+    }
+
+    pub fn value(&self) -> i16 {
+        match self {
+            MafAdjustment::MinusTen => -10,
+            MafAdjustment::MinusFive => -5,
+            MafAdjustment::None => 0,
+            MafAdjustment::PlusFive => 5,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            MafAdjustment::MinusTen => "-10 (Recovering/Medication)",
+            MafAdjustment::MinusFive => "-5 (Starting/Inconsistent)",
+            MafAdjustment::None => "0 (Consistent <2 years)",
+            MafAdjustment::PlusFive => "+5 (Consistent >2 years)",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            MafAdjustment::MinusTen => {
+                "Recovering from major illness/surgery, on regular medication, or overtrained"
+            }
+            MafAdjustment::MinusFive => {
+                "Injured or regressed, get >2 colds/year, have allergies/asthma, or just starting"
+            }
+            MafAdjustment::None => "Training consistently for up to 2 years without problems",
+            MafAdjustment::PlusFive => {
+                "Training consistently for more than 2 years, making progress without injury"
+            }
+        }
+    }
+}
+
 /// Heart rate zones based on Maffetone formula
 #[derive(Debug, Clone)]
 pub struct HeartRateZones {
@@ -139,10 +197,10 @@ pub struct HeartRateZones {
 }
 
 impl HeartRateZones {
-    /// Calculate heart rate zones using Maffetone formula
-    /// MAF = 180 - age (with adjustments)
-    pub fn from_age(age: u8) -> Self {
-        let maf_hr = Self::calculate_maf(age);
+    /// Calculate heart rate zones using Maffetone formula with adjustment
+    /// MAF = 180 - age + adjustment
+    pub fn from_age_with_adjustment(age: u8, adjustment: MafAdjustment) -> Self {
+        let maf_hr = Self::calculate_maf_with_adjustment(age, adjustment);
         HeartRateZones {
             maf_hr,
             zone1_max: maf_hr.saturating_sub(10),
@@ -150,11 +208,17 @@ impl HeartRateZones {
         }
     }
 
-    fn calculate_maf(age: u8) -> u16 {
-        // Basic Maffetone formula: 180 - age
-        // For simplicity, not applying adjustments here
-        // Users could add their own adjustments based on fitness level
-        180u16.saturating_sub(age as u16)
+    /// Calculate heart rate zones using Maffetone formula (no adjustment - backward compatible)
+    pub fn from_age(age: u8) -> Self {
+        Self::from_age_with_adjustment(age, MafAdjustment::None)
+    }
+
+    fn calculate_maf_with_adjustment(age: u8, adjustment: MafAdjustment) -> u16 {
+        // Maffetone formula: 180 - age + adjustment
+        let base_maf = 180i16 - (age as i16);
+        let adjusted_maf = base_maf + adjustment.value();
+        // Ensure minimum of 50 bpm for safety
+        adjusted_maf.max(50) as u16
     }
 
     pub fn zone1_range(&self) -> (u16, u16) {
@@ -257,6 +321,7 @@ pub struct UserProfile {
     pub target_distance: Distance,
     pub race_type: RaceType,
     pub workouts_per_week: u8,
+    pub maf_adjustment: MafAdjustment,
 }
 
 /// Complete training plan
@@ -399,6 +464,49 @@ mod tests {
         assert_eq!(z1_max, 160);
     }
 
+    #[test]
+    fn test_maffetone_with_minus_ten_adjustment() {
+        let zones = HeartRateZones::from_age_with_adjustment(40, MafAdjustment::MinusTen);
+        assert_eq!(zones.maf_hr, 130); // 180 - 40 - 10 = 130
+    }
+
+    #[test]
+    fn test_maffetone_with_minus_five_adjustment() {
+        let zones = HeartRateZones::from_age_with_adjustment(40, MafAdjustment::MinusFive);
+        assert_eq!(zones.maf_hr, 135); // 180 - 40 - 5 = 135
+    }
+
+    #[test]
+    fn test_maffetone_with_no_adjustment() {
+        let zones = HeartRateZones::from_age_with_adjustment(40, MafAdjustment::None);
+        assert_eq!(zones.maf_hr, 140); // 180 - 40 = 140
+    }
+
+    #[test]
+    fn test_maffetone_with_plus_five_adjustment() {
+        let zones = HeartRateZones::from_age_with_adjustment(40, MafAdjustment::PlusFive);
+        assert_eq!(zones.maf_hr, 145); // 180 - 40 + 5 = 145
+    }
+
+    #[test]
+    fn test_maffetone_adjustment_minimum_hr() {
+        // Test that high age + negative adjustment doesn't go below 50
+        let zones = HeartRateZones::from_age_with_adjustment(130, MafAdjustment::MinusTen);
+        assert_eq!(zones.maf_hr, 50); // 180 - 130 - 10 = 40, clamped to 50
+    }
+
+    #[test]
+    fn test_zone_ranges_with_adjustment() {
+        let zones = HeartRateZones::from_age_with_adjustment(40, MafAdjustment::PlusFive);
+        let (z1_min, z1_max) = zones.zone1_range();
+        let (z2_min, z2_max) = zones.zone2_range();
+
+        assert_eq!(z1_min, 125); // MAF - 20 = 145 - 20
+        assert_eq!(z1_max, 135); // MAF - 10 = 145 - 10
+        assert_eq!(z2_min, 136); // zone1_max + 1
+        assert_eq!(z2_max, 145); // MAF
+    }
+
     // WorkoutType tests
     #[test]
     fn test_workout_type_name() {
@@ -449,5 +557,58 @@ mod tests {
         assert_eq!(TrainingPhase::Build.name(), "Build Phase");
         assert_eq!(TrainingPhase::Peak.name(), "Peak Training");
         assert_eq!(TrainingPhase::Taper.name(), "Taper");
+    }
+
+    // MafAdjustment tests
+    #[test]
+    fn test_maf_adjustment_value() {
+        assert_eq!(MafAdjustment::MinusTen.value(), -10);
+        assert_eq!(MafAdjustment::MinusFive.value(), -5);
+        assert_eq!(MafAdjustment::None.value(), 0);
+        assert_eq!(MafAdjustment::PlusFive.value(), 5);
+    }
+
+    #[test]
+    fn test_maf_adjustment_all() {
+        let adjustments = MafAdjustment::all();
+        assert_eq!(adjustments.len(), 4);
+        assert_eq!(adjustments[0], MafAdjustment::MinusTen);
+        assert_eq!(adjustments[1], MafAdjustment::MinusFive);
+        assert_eq!(adjustments[2], MafAdjustment::None);
+        assert_eq!(adjustments[3], MafAdjustment::PlusFive);
+    }
+
+    #[test]
+    fn test_maf_adjustment_name() {
+        assert_eq!(
+            MafAdjustment::MinusTen.name(),
+            "-10 (Recovering/Medication)"
+        );
+        assert_eq!(
+            MafAdjustment::MinusFive.name(),
+            "-5 (Starting/Inconsistent)"
+        );
+        assert_eq!(MafAdjustment::None.name(), "0 (Consistent <2 years)");
+        assert_eq!(MafAdjustment::PlusFive.name(), "+5 (Consistent >2 years)");
+    }
+
+    #[test]
+    fn test_maf_adjustment_description() {
+        assert!(MafAdjustment::MinusTen
+            .description()
+            .contains("major illness"));
+        assert!(MafAdjustment::MinusFive
+            .description()
+            .contains("just starting"));
+        assert!(MafAdjustment::None.description().contains("consistently"));
+        assert!(MafAdjustment::PlusFive
+            .description()
+            .contains("more than 2 years"));
+    }
+
+    #[test]
+    fn test_maf_adjustment_default() {
+        let adjustment: MafAdjustment = Default::default();
+        assert_eq!(adjustment, MafAdjustment::None);
     }
 }

@@ -136,6 +136,14 @@ fn render_summary_panel(
         workouts_selected,
     ));
 
+    // MAF Adjustment field
+    let maf_adj_selected = is_focused && app.selected_summary_field == SummaryField::MafAdjustment;
+    lines.push(create_field_line(
+        "MAF Adjust:",
+        app.selected_maf_adjustment().name(),
+        maf_adj_selected,
+    ));
+
     lines.push(Line::from(""));
 
     // Duration (read-only, derived from distance)

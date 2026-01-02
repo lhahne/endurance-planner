@@ -3,8 +3,8 @@ use std::io;
 use std::path::Path;
 
 use crate::models::{
-    Distance, HeartRateZones, RaceType, TrainingPhase, TrainingPlan, TrainingWeek, UserProfile,
-    Workout, WorkoutType,
+    Distance, HeartRateZones, MafAdjustment, RaceType, TrainingPhase, TrainingPlan, TrainingWeek,
+    UserProfile, Workout, WorkoutType,
 };
 
 /// Errors that can occur during file operations
@@ -65,6 +65,10 @@ pub fn plan_to_markdown(plan: &TrainingPlan) -> String {
         plan.profile.workouts_per_week
     ));
     md.push_str(&format!(
+        "- **MAF Adjustment:** {}\n",
+        plan.profile.maf_adjustment.name()
+    ));
+    md.push_str(&format!(
         "- **MAF Heart Rate:** {} bpm\n",
         plan.hr_zones.maf_hr
     ));
@@ -119,15 +123,17 @@ fn parse_markdown_plan(content: &str) -> Result<TrainingPlan, FileError> {
     let distance = extract_distance(&lines)?;
     let race_type = extract_race_type(&lines)?;
     let workouts_per_week = extract_number(&lines, "Workouts per Week:")?;
+    let maf_adjustment = extract_maf_adjustment(&lines);
 
     let profile = UserProfile {
         age,
         target_distance: distance,
         race_type,
         workouts_per_week,
+        maf_adjustment,
     };
 
-    let hr_zones = HeartRateZones::from_age(age);
+    let hr_zones = HeartRateZones::from_age_with_adjustment(age, maf_adjustment);
 
     // Parse weeks
     let weeks = parse_weeks(&lines)?;
@@ -202,6 +208,26 @@ fn extract_race_type(lines: &[&str]) -> Result<RaceType, FileError> {
     Err(FileError::ParseError(
         "Could not parse race type".to_string(),
     ))
+}
+
+/// Extract MAF adjustment from markdown lines.
+/// Returns None (default) if not found for backward compatibility with old files.
+fn extract_maf_adjustment(lines: &[&str]) -> MafAdjustment {
+    for line in lines {
+        if line.contains("MAF Adjustment:") {
+            if line.contains("-10") {
+                return MafAdjustment::MinusTen;
+            } else if line.contains("-5") {
+                return MafAdjustment::MinusFive;
+            } else if line.contains("+5") {
+                return MafAdjustment::PlusFive;
+            } else if line.contains("0 (") {
+                return MafAdjustment::None;
+            }
+        }
+    }
+    // Default to None for backward compatibility with old files
+    MafAdjustment::None
 }
 
 fn parse_weeks(lines: &[&str]) -> Result<Vec<TrainingWeek>, FileError> {
@@ -409,6 +435,7 @@ mod tests {
             target_distance: Distance::Marathon,
             race_type: RaceType::Road,
             workouts_per_week: 5,
+            maf_adjustment: MafAdjustment::None,
         };
         let hr_zones = HeartRateZones::from_age(35);
         let plan = TrainingPlan {
@@ -423,6 +450,7 @@ mod tests {
         assert!(md.contains("Target Distance:** Marathon"));
         assert!(md.contains("Race Type:** Road"));
         assert!(md.contains("Workouts per Week:** 5"));
+        assert!(md.contains("MAF Adjustment:** 0"));
     }
 
     #[test]
@@ -432,9 +460,10 @@ mod tests {
             target_distance: Distance::Marathon,
             race_type: RaceType::Road,
             workouts_per_week: 5,
+            maf_adjustment: MafAdjustment::PlusFive,
         };
 
-        let hr_zones = HeartRateZones::from_age(35);
+        let hr_zones = HeartRateZones::from_age_with_adjustment(35, MafAdjustment::PlusFive);
 
         let plan = TrainingPlan {
             profile,
@@ -464,6 +493,8 @@ mod tests {
         assert_eq!(parsed.profile.age, 35);
         assert_eq!(parsed.profile.target_distance, Distance::Marathon);
         assert_eq!(parsed.profile.race_type, RaceType::Road);
+        assert_eq!(parsed.profile.maf_adjustment, MafAdjustment::PlusFive);
+        assert_eq!(parsed.hr_zones.maf_hr, 150); // 180 - 35 + 5 = 150
         assert_eq!(parsed.weeks.len(), 1);
     }
 
@@ -744,6 +775,42 @@ mod tests {
         assert!(display.contains("invalid format"));
     }
 
+    // MAF adjustment parsing tests
+    #[test]
+    fn test_extract_maf_adjustment_plus_five() {
+        let lines = vec!["- **MAF Adjustment:** +5 (Consistent >2 years)"];
+        let adjustment = extract_maf_adjustment(&lines);
+        assert_eq!(adjustment, MafAdjustment::PlusFive);
+    }
+
+    #[test]
+    fn test_extract_maf_adjustment_minus_ten() {
+        let lines = vec!["- **MAF Adjustment:** -10 (Recovering/Medication)"];
+        let adjustment = extract_maf_adjustment(&lines);
+        assert_eq!(adjustment, MafAdjustment::MinusTen);
+    }
+
+    #[test]
+    fn test_extract_maf_adjustment_minus_five() {
+        let lines = vec!["- **MAF Adjustment:** -5 (Starting/Inconsistent)"];
+        let adjustment = extract_maf_adjustment(&lines);
+        assert_eq!(adjustment, MafAdjustment::MinusFive);
+    }
+
+    #[test]
+    fn test_extract_maf_adjustment_none() {
+        let lines = vec!["- **MAF Adjustment:** 0 (Consistent <2 years)"];
+        let adjustment = extract_maf_adjustment(&lines);
+        assert_eq!(adjustment, MafAdjustment::None);
+    }
+
+    #[test]
+    fn test_extract_maf_adjustment_missing_defaults_to_none() {
+        let lines = vec!["- **Age:** 35"];
+        let adjustment = extract_maf_adjustment(&lines);
+        assert_eq!(adjustment, MafAdjustment::None);
+    }
+
     // Helper function
     fn create_test_plan() -> TrainingPlan {
         let profile = UserProfile {
@@ -751,6 +818,7 @@ mod tests {
             target_distance: Distance::Marathon,
             race_type: RaceType::Road,
             workouts_per_week: 5,
+            maf_adjustment: MafAdjustment::None,
         };
         let hr_zones = HeartRateZones::from_age(30);
         TrainingPlan {
