@@ -322,48 +322,63 @@ fn render_plan_view(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(6), Constraint::Min(0)])
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
         .split(area);
 
-    // Summary section
+    // Summary section (left panel)
     let mut summary = vec![
         Line::from(vec![
             Span::styled("Target: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                format!(
-                    "{} {}",
-                    plan.profile.target_distance.name(),
-                    plan.profile.race_type.name()
-                ),
+                plan.profile.target_distance.name(),
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
-            Span::styled("MAF Heart Rate: ", Style::default().fg(Color::Gray)),
+            Span::styled("Type: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                format!("{} bpm", plan.hr_zones.maf_hr),
-                Style::default().fg(Color::Cyan),
+                plan.profile.race_type.name(),
+                Style::default().fg(Color::Yellow),
             ),
-            Span::raw(" | "),
-            Span::styled("Plan Duration: ", Style::default().fg(Color::Gray)),
+        ]),
+        Line::from(vec![
+            Span::styled("Duration: ", Style::default().fg(Color::Gray)),
             Span::styled(
                 format!("{} weeks", plan.weeks.len()),
                 Style::default().fg(Color::Cyan),
             ),
         ]),
-        Line::from(vec![Span::styled(
-            format!(
-                "Zone 1: {}-{} bpm | Zone 2: {}-{} bpm",
-                plan.hr_zones.maf_hr - 20,
-                plan.hr_zones.maf_hr - 10,
-                plan.hr_zones.maf_hr - 10,
-                plan.hr_zones.maf_hr
+        Line::from(""),
+        Line::from(Span::styled(
+            "Heart Rate Zones",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("MAF: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} bpm", plan.hr_zones.maf_hr),
+                Style::default().fg(Color::Cyan),
             ),
-            Style::default().fg(Color::DarkGray),
-        )]),
+        ]),
+        Line::from(vec![
+            Span::styled("Zone 1: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{}-{}", plan.hr_zones.maf_hr - 20, plan.hr_zones.maf_hr - 10),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Zone 2: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{}-{}", plan.hr_zones.maf_hr - 10, plan.hr_zones.maf_hr),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
     ];
 
     // Show status message if any
