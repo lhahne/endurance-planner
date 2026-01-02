@@ -1,7 +1,9 @@
 mod app;
 mod file_io;
 mod models;
+mod planner;
 mod ui;
+mod workouts;
 
 use std::io;
 use std::time::Duration;
