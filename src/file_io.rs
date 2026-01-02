@@ -658,7 +658,7 @@ mod tests {
     fn test_parse_workout_type_intervals() {
         let wt = parse_workout_type("Intervals");
         match wt {
-            WorkoutType::Intervals { .. } => {},
+            WorkoutType::Intervals { .. } => {}
             _ => panic!("Expected Intervals"),
         }
     }
@@ -667,7 +667,7 @@ mod tests {
     fn test_parse_workout_type_tempo() {
         let wt = parse_workout_type("Tempo Run");
         match wt {
-            WorkoutType::TempoRun { .. } => {},
+            WorkoutType::TempoRun { .. } => {}
             _ => panic!("Expected TempoRun"),
         }
     }
@@ -676,7 +676,7 @@ mod tests {
     fn test_parse_workout_type_hill_repeats() {
         let wt = parse_workout_type("Hill Repeats");
         match wt {
-            WorkoutType::HillRepeats { .. } => {},
+            WorkoutType::HillRepeats { .. } => {}
             _ => panic!("Expected HillRepeats"),
         }
     }
@@ -691,7 +691,7 @@ mod tests {
     fn test_parse_workout_type_vertical() {
         let wt = parse_workout_type("Vertical Training");
         match wt {
-            WorkoutType::VerticalTraining { .. } => {},
+            WorkoutType::VerticalTraining { .. } => {}
             _ => panic!("Expected VerticalTraining"),
         }
     }
@@ -759,13 +759,11 @@ mod tests {
             weeks: vec![TrainingWeek {
                 week_number: 1,
                 phase: TrainingPhase::Base,
-                workouts: vec![
-                    Workout {
-                        workout_type: WorkoutType::EasyRun,
-                        duration_minutes: 45,
-                        description: "Test workout".to_string(),
-                    },
-                ],
+                workouts: vec![Workout {
+                    workout_type: WorkoutType::EasyRun,
+                    duration_minutes: 45,
+                    description: "Test workout".to_string(),
+                }],
                 total_volume_minutes: 45,
             }],
         }

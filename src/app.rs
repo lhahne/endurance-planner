@@ -9,15 +9,46 @@ use crate::models::{
 /// Current screen in the application
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
-    Welcome,
-    AgeInput,
-    DistanceSelect,
-    RaceTypeSelect,
-    WorkoutsPerWeekSelect,
     PlanView,
     SavePlan,
     LoadPlan,
     EditWorkout,
+}
+
+/// Which panel has focus in PlanView
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlanFocus {
+    Summary, // Left panel - editing summary fields
+    Weeks,   // Right panel - navigating weeks/workouts
+}
+
+/// Summary fields that can be edited in the left panel
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SummaryField {
+    Age,
+    Distance,
+    RaceType,
+    WorkoutsPerWeek,
+}
+
+impl SummaryField {
+    pub fn next(self) -> SummaryField {
+        match self {
+            SummaryField::Age => SummaryField::Distance,
+            SummaryField::Distance => SummaryField::RaceType,
+            SummaryField::RaceType => SummaryField::WorkoutsPerWeek,
+            SummaryField::WorkoutsPerWeek => SummaryField::Age,
+        }
+    }
+
+    pub fn prev(self) -> SummaryField {
+        match self {
+            SummaryField::Age => SummaryField::WorkoutsPerWeek,
+            SummaryField::Distance => SummaryField::Age,
+            SummaryField::RaceType => SummaryField::Distance,
+            SummaryField::WorkoutsPerWeek => SummaryField::RaceType,
+        }
+    }
 }
 
 /// Application state
@@ -26,10 +57,14 @@ pub struct App {
     pub should_quit: bool,
 
     // User input state
-    pub age_input: String,
+    pub age: u8,
     pub selected_distance_index: usize,
     pub selected_race_type_index: usize,
     pub selected_workouts_per_week: u8,
+
+    // Summary editing state
+    pub plan_focus: PlanFocus,
+    pub selected_summary_field: SummaryField,
 
     // Generated plan
     pub training_plan: Option<TrainingPlan>,
@@ -47,13 +82,15 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        App {
-            screen: Screen::Welcome,
+        let mut app = App {
+            screen: Screen::PlanView,
             should_quit: false,
-            age_input: String::new(),
-            selected_distance_index: 0,
-            selected_race_type_index: 0,
+            age: 39,
+            selected_distance_index: 2,  // Half Marathon
+            selected_race_type_index: 0, // Road
             selected_workouts_per_week: 4,
+            plan_focus: PlanFocus::Summary,
+            selected_summary_field: SummaryField::Age,
             training_plan: None,
             selected_week: 0,
             selected_workout: 0,
@@ -61,46 +98,82 @@ impl App {
             status_message: None,
             edit_buffer: String::new(),
             edit_cursor: 0,
+        };
+        app.generate_plan();
+        app
+    }
+
+    /// Toggle focus between summary and weeks panels
+    pub fn toggle_focus(&mut self) {
+        self.plan_focus = match self.plan_focus {
+            PlanFocus::Summary => PlanFocus::Weeks,
+            PlanFocus::Weeks => PlanFocus::Summary,
+        };
+    }
+
+    /// Move to next summary field
+    pub fn select_next_summary_field(&mut self) {
+        self.selected_summary_field = self.selected_summary_field.next();
+    }
+
+    /// Move to previous summary field
+    pub fn select_prev_summary_field(&mut self) {
+        self.selected_summary_field = self.selected_summary_field.prev();
+    }
+
+    /// Modify the currently selected summary field (increment/cycle forward)
+    pub fn increment_summary_field(&mut self) {
+        match self.selected_summary_field {
+            SummaryField::Age => {
+                if self.age < 100 {
+                    self.age += 1;
+                    self.regenerate_plan();
+                }
+            }
+            SummaryField::Distance => {
+                self.select_next_distance();
+                self.regenerate_plan();
+            }
+            SummaryField::RaceType => {
+                self.select_next_race_type();
+                self.regenerate_plan();
+            }
+            SummaryField::WorkoutsPerWeek => {
+                self.increase_workouts();
+                self.regenerate_plan();
+            }
         }
     }
 
-    pub fn next_screen(&mut self) {
-        self.status_message = None;
-        self.screen = match self.screen {
-            Screen::Welcome => Screen::AgeInput,
-            Screen::AgeInput => {
-                if self.validate_age() {
-                    Screen::DistanceSelect
-                } else {
-                    Screen::AgeInput
+    /// Modify the currently selected summary field (decrement/cycle backward)
+    pub fn decrement_summary_field(&mut self) {
+        match self.selected_summary_field {
+            SummaryField::Age => {
+                if self.age > 10 {
+                    self.age -= 1;
+                    self.regenerate_plan();
                 }
             }
-            Screen::DistanceSelect => Screen::RaceTypeSelect,
-            Screen::RaceTypeSelect => Screen::WorkoutsPerWeekSelect,
-            Screen::WorkoutsPerWeekSelect => {
-                self.generate_plan();
-                Screen::PlanView
+            SummaryField::Distance => {
+                self.select_prev_distance();
+                self.regenerate_plan();
             }
-            Screen::PlanView => Screen::PlanView,
-            Screen::SavePlan => Screen::SavePlan,
-            Screen::LoadPlan => Screen::LoadPlan,
-            Screen::EditWorkout => Screen::EditWorkout,
-        };
+            SummaryField::RaceType => {
+                self.select_prev_race_type();
+                self.regenerate_plan();
+            }
+            SummaryField::WorkoutsPerWeek => {
+                self.decrease_workouts();
+                self.regenerate_plan();
+            }
+        }
     }
 
-    pub fn previous_screen(&mut self) {
-        self.status_message = None;
-        self.screen = match self.screen {
-            Screen::Welcome => Screen::Welcome,
-            Screen::AgeInput => Screen::Welcome,
-            Screen::DistanceSelect => Screen::AgeInput,
-            Screen::RaceTypeSelect => Screen::DistanceSelect,
-            Screen::WorkoutsPerWeekSelect => Screen::RaceTypeSelect,
-            Screen::PlanView => Screen::WorkoutsPerWeekSelect,
-            Screen::SavePlan => Screen::PlanView,
-            Screen::LoadPlan => Screen::Welcome,
-            Screen::EditWorkout => Screen::PlanView,
-        };
+    /// Regenerate plan and reset week/workout selection
+    pub fn regenerate_plan(&mut self) {
+        self.generate_plan();
+        self.selected_week = 0;
+        self.selected_workout = 0;
     }
 
     pub fn go_to_save(&mut self) {
@@ -158,6 +231,18 @@ impl App {
         let path = PathBuf::from(&self.file_path_input);
         match load_plan_from_markdown(&path) {
             Ok(plan) => {
+                // Sync app state from loaded plan
+                self.age = plan.profile.age;
+                self.selected_distance_index = Distance::all()
+                    .iter()
+                    .position(|d| *d == plan.profile.target_distance)
+                    .unwrap_or(0);
+                self.selected_race_type_index = RaceType::all()
+                    .iter()
+                    .position(|r| *r == plan.profile.race_type)
+                    .unwrap_or(0);
+                self.selected_workouts_per_week = plan.profile.workouts_per_week;
+
                 self.training_plan = Some(plan);
                 self.selected_week = 0;
                 self.selected_workout = 0;
@@ -231,17 +316,6 @@ impl App {
         }
     }
 
-    fn validate_age(&self) -> bool {
-        self.age_input
-            .parse::<u8>()
-            .map(|age| (10..=100).contains(&age))
-            .unwrap_or(false)
-    }
-
-    pub fn get_age(&self) -> u8 {
-        self.age_input.parse().unwrap_or(30)
-    }
-
     pub fn selected_distance(&self) -> Distance {
         Distance::all()[self.selected_distance_index]
     }
@@ -300,7 +374,7 @@ impl App {
 
     fn generate_plan(&mut self) {
         let profile = UserProfile {
-            age: self.get_age(),
+            age: self.age,
             target_distance: self.selected_distance(),
             race_type: self.selected_race_type(),
             workouts_per_week: self.selected_workouts_per_week,
@@ -337,7 +411,10 @@ fn generate_training_weeks(
     let base_weeks = (total_weeks as f32 * 0.4).ceil() as u8;
     let build_weeks = (total_weeks as f32 * 0.3).ceil() as u8;
     let peak_weeks = (total_weeks as f32 * 0.2).ceil() as u8;
-    let _taper_weeks = total_weeks.saturating_sub(base_weeks).saturating_sub(build_weeks).saturating_sub(peak_weeks);
+    let _taper_weeks = total_weeks
+        .saturating_sub(base_weeks)
+        .saturating_sub(build_weeks)
+        .saturating_sub(peak_weeks);
 
     for week_num in 1..=total_weeks {
         let phase = if week_num <= base_weeks {
@@ -629,56 +706,114 @@ mod tests {
     #[test]
     fn test_app_creation() {
         let app = App::new();
-        assert_eq!(app.screen, Screen::Welcome);
+        assert_eq!(app.screen, Screen::PlanView);
         assert!(!app.should_quit);
+        assert!(app.training_plan.is_some()); // Plan generated on startup
     }
 
     #[test]
     fn test_app_default() {
         let app = App::default();
-        assert_eq!(app.screen, Screen::Welcome);
+        assert_eq!(app.screen, Screen::PlanView);
         assert_eq!(app.selected_workouts_per_week, 4);
-    }
-
-    // Age validation tests
-    #[test]
-    fn test_validate_age_valid() {
-        let mut app = App::new();
-        app.age_input = "30".to_string();
-        assert_eq!(app.get_age(), 30);
+        assert_eq!(app.age, 39);
     }
 
     #[test]
-    fn test_validate_age_too_young() {
-        let mut app = App::new();
-        app.age_input = "9".to_string();
-        app.screen = Screen::AgeInput;
-        app.next_screen();
-        assert_eq!(app.screen, Screen::AgeInput); // Should stay on age input
-    }
-
-    #[test]
-    fn test_validate_age_too_old() {
-        let mut app = App::new();
-        app.age_input = "101".to_string();
-        app.screen = Screen::AgeInput;
-        app.next_screen();
-        assert_eq!(app.screen, Screen::AgeInput); // Should stay on age input
-    }
-
-    #[test]
-    fn test_validate_age_invalid() {
-        let mut app = App::new();
-        app.age_input = "invalid".to_string();
-        app.screen = Screen::AgeInput;
-        app.next_screen();
-        assert_eq!(app.screen, Screen::AgeInput); // Should stay on age input
-    }
-
-    #[test]
-    fn test_get_age_default() {
+    fn test_app_starts_with_plan() {
         let app = App::new();
-        assert_eq!(app.get_age(), 30); // Default when parse fails
+        assert!(app.training_plan.is_some());
+        let plan = app.training_plan.as_ref().unwrap();
+        assert_eq!(plan.hr_zones.maf_hr, 141); // 180 - 39 = 141
+        assert_eq!(plan.weeks.len(), 12); // Half Marathon = 12 weeks
+    }
+
+    // Focus toggle tests
+    #[test]
+    fn test_toggle_focus() {
+        let mut app = App::new();
+        assert_eq!(app.plan_focus, PlanFocus::Summary);
+
+        app.toggle_focus();
+        assert_eq!(app.plan_focus, PlanFocus::Weeks);
+
+        app.toggle_focus();
+        assert_eq!(app.plan_focus, PlanFocus::Summary);
+    }
+
+    // Summary field navigation tests
+    #[test]
+    fn test_summary_field_navigation() {
+        let mut app = App::new();
+        assert_eq!(app.selected_summary_field, SummaryField::Age);
+
+        app.select_next_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::Distance);
+
+        app.select_next_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::RaceType);
+
+        app.select_next_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::WorkoutsPerWeek);
+
+        app.select_next_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::Age); // Wraps around
+
+        app.select_prev_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::WorkoutsPerWeek);
+    }
+
+    // Age field editing tests
+    #[test]
+    fn test_age_increment() {
+        let mut app = App::new();
+        app.selected_summary_field = SummaryField::Age;
+        let original_age = app.age;
+
+        app.increment_summary_field();
+        assert_eq!(app.age, original_age + 1);
+
+        // Check plan was regenerated with new MAF
+        let plan = app.training_plan.as_ref().unwrap();
+        assert_eq!(plan.hr_zones.maf_hr, 180 - (original_age + 1) as u16);
+    }
+
+    #[test]
+    fn test_age_decrement() {
+        let mut app = App::new();
+        app.selected_summary_field = SummaryField::Age;
+        let original_age = app.age;
+
+        app.decrement_summary_field();
+        assert_eq!(app.age, original_age - 1);
+    }
+
+    #[test]
+    fn test_age_limits() {
+        let mut app = App::new();
+        app.selected_summary_field = SummaryField::Age;
+
+        app.age = 100;
+        app.increment_summary_field();
+        assert_eq!(app.age, 100); // Should not exceed 100
+
+        app.age = 10;
+        app.decrement_summary_field();
+        assert_eq!(app.age, 10); // Should not go below 10
+    }
+
+    // Distance field editing tests
+    #[test]
+    fn test_distance_change_regenerates_plan() {
+        let mut app = App::new();
+        app.selected_summary_field = SummaryField::Distance;
+        let original_weeks = app.training_plan.as_ref().unwrap().weeks.len();
+
+        app.increment_summary_field(); // Change to next distance
+        let new_weeks = app.training_plan.as_ref().unwrap().weeks.len();
+
+        // Distance changed should affect plan duration
+        assert_ne!(original_weeks, new_weeks);
     }
 
     // Distance selection tests
@@ -786,46 +921,16 @@ mod tests {
         assert_eq!(app.selected_workouts_per_week, 2);
     }
 
-    // Screen navigation tests
-    #[test]
-    fn test_screen_navigation() {
-        let mut app = App::new();
-        app.age_input = "30".to_string();
-
-        app.next_screen();
-        assert_eq!(app.screen, Screen::AgeInput);
-
-        app.next_screen();
-        assert_eq!(app.screen, Screen::DistanceSelect);
-    }
-
-    #[test]
-    fn test_previous_screen() {
-        let mut app = App::new();
-        app.screen = Screen::DistanceSelect;
-
-        app.previous_screen();
-        assert_eq!(app.screen, Screen::AgeInput);
-
-        app.previous_screen();
-        assert_eq!(app.screen, Screen::Welcome);
-
-        // Test staying at welcome
-        app.previous_screen();
-        assert_eq!(app.screen, Screen::Welcome);
-    }
-
     // Plan generation tests
     #[test]
     fn test_plan_generation() {
         let mut app = App::new();
-        app.age_input = "35".to_string();
+        app.age = 35;
         app.selected_distance_index = 3; // Marathon
         app.selected_race_type_index = 0; // Road
         app.selected_workouts_per_week = 5;
 
-        app.screen = Screen::WorkoutsPerWeekSelect;
-        app.next_screen();
+        app.regenerate_plan();
 
         assert!(app.training_plan.is_some());
         let plan = app.training_plan.as_ref().unwrap();
@@ -836,13 +941,12 @@ mod tests {
     #[test]
     fn test_plan_generation_trail() {
         let mut app = App::new();
-        app.age_input = "40".to_string();
+        app.age = 40;
         app.selected_distance_index = 4; // 50K
         app.selected_race_type_index = 1; // Trail
         app.selected_workouts_per_week = 4;
 
-        app.screen = Screen::WorkoutsPerWeekSelect;
-        app.next_screen();
+        app.regenerate_plan();
 
         let plan = app.training_plan.as_ref().unwrap();
         assert_eq!(plan.profile.race_type, RaceType::Trail);
@@ -852,16 +956,10 @@ mod tests {
     // Plan view navigation tests
     #[test]
     fn test_scroll_plan_down() {
-        let mut app = App::new();
-        app.age_input = "30".to_string();
-        app.selected_distance_index = 0; // 5K
-        app.selected_workouts_per_week = 4;
-
-        app.screen = Screen::WorkoutsPerWeekSelect;
-        app.next_screen();
-
+        let app = App::new();
         assert_eq!(app.selected_week, 0);
 
+        let mut app = app;
         app.scroll_plan_down();
         assert_eq!(app.selected_week, 1);
     }
@@ -869,13 +967,6 @@ mod tests {
     #[test]
     fn test_scroll_plan_up() {
         let mut app = App::new();
-        app.age_input = "30".to_string();
-        app.selected_distance_index = 0; // 5K
-        app.selected_workouts_per_week = 4;
-
-        app.screen = Screen::WorkoutsPerWeekSelect;
-        app.next_screen();
-
         app.selected_week = 2;
         app.scroll_plan_up();
         assert_eq!(app.selected_week, 1);
@@ -936,7 +1027,12 @@ mod tests {
         let workout = create_intervals(TrainingPhase::Build);
 
         match workout.workout_type {
-            WorkoutType::Intervals { reps, work_minutes, rest_minutes, target_rpe } => {
+            WorkoutType::Intervals {
+                reps,
+                work_minutes,
+                rest_minutes,
+                target_rpe,
+            } => {
                 assert_eq!(reps, 4);
                 assert_eq!(work_minutes, 3);
                 assert_eq!(rest_minutes, 2);
@@ -963,7 +1059,10 @@ mod tests {
         let workout = create_tempo_run(40);
 
         match workout.workout_type {
-            WorkoutType::TempoRun { duration_minutes, target_rpe } => {
+            WorkoutType::TempoRun {
+                duration_minutes,
+                target_rpe,
+            } => {
                 assert_eq!(duration_minutes, 24); // 40 * 0.6
                 assert_eq!(target_rpe, RPE::Six);
             }
@@ -1000,7 +1099,9 @@ mod tests {
         let workout = create_vertical_training(Distance::HundredK);
 
         match workout.workout_type {
-            WorkoutType::VerticalTraining { elevation_gain_meters } => {
+            WorkoutType::VerticalTraining {
+                elevation_gain_meters,
+            } => {
                 assert_eq!(elevation_gain_meters, 800);
             }
             _ => panic!("Expected VerticalTraining workout type"),
@@ -1012,7 +1113,9 @@ mod tests {
         let workout = create_vertical_training(Distance::HundredMiles);
 
         match workout.workout_type {
-            WorkoutType::VerticalTraining { elevation_gain_meters } => {
+            WorkoutType::VerticalTraining {
+                elevation_gain_meters,
+            } => {
                 assert_eq!(elevation_gain_meters, 1000);
             }
             _ => panic!("Expected VerticalTraining workout type"),
@@ -1034,16 +1137,28 @@ mod tests {
         assert_eq!(weeks.len(), 16);
 
         // Check phase distribution (40% base, 30% build, 20% peak, remaining taper)
-        let base_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Base).count();
-        let build_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Build).count();
-        let peak_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Peak).count();
-        let taper_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Taper).count();
+        let base_count = weeks
+            .iter()
+            .filter(|w| w.phase == TrainingPhase::Base)
+            .count();
+        let build_count = weeks
+            .iter()
+            .filter(|w| w.phase == TrainingPhase::Build)
+            .count();
+        let peak_count = weeks
+            .iter()
+            .filter(|w| w.phase == TrainingPhase::Peak)
+            .count();
+        let taper_count = weeks
+            .iter()
+            .filter(|w| w.phase == TrainingPhase::Taper)
+            .count();
 
         // Verify phases are present and in expected proportions
         assert!(base_count >= 5); // Roughly 40% of 16 = 6.4 -> ceil = 7
         assert!(build_count >= 4); // Roughly 30% of 16 = 4.8 -> ceil = 5
         assert!(peak_count >= 3); // Roughly 20% of 16 = 3.2 -> ceil = 4
-        // Taper might be 0 due to ceiling operations
+                                  // Taper might be 0 due to ceiling operations
         assert_eq!(base_count + build_count + peak_count + taper_count, 16);
     }
 

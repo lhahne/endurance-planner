@@ -2,12 +2,12 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 
-use crate::app::{App, Screen};
-use crate::models::{Distance, RaceType, TrainingPhase};
+use crate::app::{App, PlanFocus, Screen, SummaryField};
+use crate::models::TrainingPhase;
 
 pub fn render(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
@@ -39,11 +39,6 @@ fn render_header(frame: &mut Frame, area: Rect) {
 
 fn render_main_content(frame: &mut Frame, app: &App, area: Rect) {
     match app.screen {
-        Screen::Welcome => render_welcome(frame, app, area),
-        Screen::AgeInput => render_age_input(frame, app, area),
-        Screen::DistanceSelect => render_distance_select(frame, app, area),
-        Screen::RaceTypeSelect => render_race_type_select(frame, app, area),
-        Screen::WorkoutsPerWeekSelect => render_workouts_select(frame, app, area),
         Screen::PlanView => render_plan_view(frame, app, area),
         Screen::SavePlan => render_save_plan(frame, app, area),
         Screen::LoadPlan => render_load_plan(frame, app, area),
@@ -53,16 +48,14 @@ fn render_main_content(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let help_text = match app.screen {
-        Screen::Welcome => "Enter: New plan | l: Load plan | q: Quit",
-        Screen::AgeInput => "Enter your age | Enter to continue | Esc to go back | q to quit",
-        Screen::DistanceSelect => "Up/Down to select | Enter to continue | Esc to go back",
-        Screen::RaceTypeSelect => "Up/Down to select | Enter to continue | Esc to go back",
-        Screen::WorkoutsPerWeekSelect => {
-            "Up/Down to adjust | Enter to generate plan | Esc to go back"
-        }
-        Screen::PlanView => {
-            "Up/Down: weeks | Left/Right: workouts | e: edit | s: save | l: load | q: quit"
-        }
+        Screen::PlanView => match app.plan_focus {
+            PlanFocus::Summary => {
+                "Tab: weeks | Up/Down: field | Left/Right: value | s: save | l: load | q: quit"
+            }
+            PlanFocus::Weeks => {
+                "Tab: settings | Up/Down: weeks | Left/Right: workouts | e: edit | s: save | l: load | q: quit"
+            }
+        },
         Screen::SavePlan => "Enter file path | Enter: save | Esc: cancel",
         Screen::LoadPlan => "Enter file path | Enter: load | Esc: cancel",
         Screen::EditWorkout => "Edit description | Enter: save | Esc: cancel",
@@ -75,247 +68,6 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(footer, area);
 }
 
-fn render_welcome(frame: &mut Frame, app: &App, area: Rect) {
-    let mut welcome_text = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "Welcome to Endurance Training Planner!",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from("This application will help you create a personalized"),
-        Line::from("training plan based on:"),
-        Line::from(""),
-        Line::from(Span::styled("  * ", Style::default().fg(Color::Yellow))),
-        Line::from("    Your age (for Maffetone heart rate zones)"),
-        Line::from(Span::styled("  * ", Style::default().fg(Color::Yellow))),
-        Line::from("    Target race distance"),
-        Line::from(Span::styled("  * ", Style::default().fg(Color::Yellow))),
-        Line::from("    Race type (road or trail)"),
-        Line::from(Span::styled("  * ", Style::default().fg(Color::Yellow))),
-        Line::from("    Number of workouts per week"),
-        Line::from(""),
-        Line::from("Your plan will use:"),
-        Line::from(Span::styled(
-            "  - Maffetone MAF heart rate for aerobic training",
-            Style::default().fg(Color::Cyan),
-        )),
-        Line::from(Span::styled(
-            "  - RPE (Rate of Perceived Exertion) for intervals",
-            Style::default().fg(Color::Cyan),
-        )),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Press Enter to create a new plan, or 'l' to load an existing plan...",
-            Style::default().add_modifier(Modifier::ITALIC),
-        )),
-    ];
-
-    // Show status message if any
-    if let Some((msg, is_error)) = &app.status_message {
-        welcome_text.push(Line::from(""));
-        welcome_text.push(Line::from(Span::styled(
-            msg.clone(),
-            Style::default().fg(if *is_error { Color::Red } else { Color::Green }),
-        )));
-    }
-
-    let paragraph = Paragraph::new(welcome_text)
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title("Welcome"));
-    frame.render_widget(paragraph, area);
-}
-
-fn render_age_input(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Length(5),
-            Constraint::Percentage(30),
-            Constraint::Min(0),
-        ])
-        .split(area);
-
-    let explanation = vec![
-        Line::from("Enter your age to calculate your MAF (Maximum Aerobic Function) heart rate."),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Maffetone Formula: MAF HR = 180 - age",
-            Style::default().fg(Color::Cyan),
-        )),
-        Line::from(""),
-        Line::from("This determines your optimal aerobic training zone."),
-    ];
-
-    let explanation_widget = Paragraph::new(explanation)
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true });
-    frame.render_widget(explanation_widget, chunks[0]);
-
-    let input_block = Block::default()
-        .borders(Borders::ALL)
-        .title("Your Age")
-        .style(Style::default().fg(Color::Yellow));
-
-    let input_text = if app.age_input.is_empty() {
-        Span::styled("_", Style::default().add_modifier(Modifier::SLOW_BLINK))
-    } else {
-        Span::raw(&app.age_input)
-    };
-
-    let input = Paragraph::new(input_text)
-        .alignment(Alignment::Center)
-        .block(input_block);
-
-    let input_area = centered_rect(20, 100, chunks[1]);
-    frame.render_widget(input, input_area);
-
-    if !app.age_input.is_empty() {
-        if let Ok(age) = app.age_input.parse::<u8>() {
-            if (10..=100).contains(&age) {
-                let maf = 180 - age as u16;
-                let preview = vec![
-                    Line::from(Span::styled(
-                        format!("Your MAF HR: {} bpm", maf),
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    )),
-                    Line::from(format!("Zone 1 (Recovery): {}-{} bpm", maf - 20, maf - 10)),
-                    Line::from(format!("Zone 2 (Aerobic): {}-{} bpm", maf - 10, maf)),
-                ];
-                let preview_widget = Paragraph::new(preview).alignment(Alignment::Center);
-                frame.render_widget(preview_widget, chunks[2]);
-            }
-        }
-    }
-}
-
-fn render_distance_select(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
-        .split(area);
-
-    let title = Paragraph::new("Select your target race distance:")
-        .alignment(Alignment::Center)
-        .style(Style::default().add_modifier(Modifier::BOLD));
-    frame.render_widget(title, chunks[0]);
-
-    let items: Vec<ListItem> = Distance::all()
-        .iter()
-        .enumerate()
-        .map(|(i, d)| {
-            let style = if i == app.selected_distance_index {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-            let prefix = if i == app.selected_distance_index {
-                "> "
-            } else {
-                "  "
-            };
-            let weeks = d.plan_weeks();
-            ListItem::new(format!("{}{} ({} week plan)", prefix, d.name(), weeks)).style(style)
-        })
-        .collect();
-
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Race Distance"),
-    );
-    frame.render_widget(list, chunks[1]);
-}
-
-fn render_race_type_select(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
-        .split(area);
-
-    let title = Paragraph::new("Select race type:")
-        .alignment(Alignment::Center)
-        .style(Style::default().add_modifier(Modifier::BOLD));
-    frame.render_widget(title, chunks[0]);
-
-    let items: Vec<ListItem> = RaceType::all()
-        .iter()
-        .enumerate()
-        .map(|(i, rt)| {
-            let style = if i == app.selected_race_type_index {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-            let prefix = if i == app.selected_race_type_index {
-                "> "
-            } else {
-                "  "
-            };
-            let description = match rt {
-                RaceType::Road => "Flat to rolling terrain, consistent surface",
-                RaceType::Trail => "Technical terrain, elevation changes, varied surfaces",
-            };
-            ListItem::new(format!("{}{}: {}", prefix, rt.name(), description)).style(style)
-        })
-        .collect();
-
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Race Type"));
-    frame.render_widget(list, chunks[1]);
-}
-
-fn render_workouts_select(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Length(5),
-            Constraint::Min(0),
-        ])
-        .split(area);
-
-    let title = Paragraph::new("How many workouts per week?")
-        .alignment(Alignment::Center)
-        .style(Style::default().add_modifier(Modifier::BOLD));
-    frame.render_widget(title, chunks[0]);
-
-    let workout_display = Paragraph::new(format!("{}", app.selected_workouts_per_week))
-        .alignment(Alignment::Center)
-        .style(
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Workouts/Week (2-7)"),
-        );
-    let workout_area = centered_rect(20, 100, chunks[1]);
-    frame.render_widget(workout_display, workout_area);
-
-    let recommendation = match app.selected_workouts_per_week {
-        2..=3 => "Good for beginners or those with limited time",
-        4..=5 => "Balanced approach for most runners",
-        6..=7 => "High volume, ensure adequate recovery",
-        _ => "",
-    };
-
-    let rec_widget = Paragraph::new(recommendation)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Cyan));
-    frame.render_widget(rec_widget, chunks[2]);
-}
-
 fn render_plan_view(frame: &mut Frame, app: &App, area: Rect) {
     let Some(plan) = &app.training_plan else {
         return;
@@ -326,169 +78,259 @@ fn render_plan_view(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
         .split(area);
 
-    // Summary section (left panel)
-    let mut summary = vec![
-        Line::from(vec![
-            Span::styled("Target: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                plan.profile.target_distance.name(),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Type: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                plan.profile.race_type.name(),
-                Style::default().fg(Color::Yellow),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Duration: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{} weeks", plan.weeks.len()),
-                Style::default().fg(Color::Cyan),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Heart Rate Zones",
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(vec![
-            Span::styled("MAF: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{} bpm", plan.hr_zones.maf_hr),
-                Style::default().fg(Color::Cyan),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Zone 1: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{}-{}", plan.hr_zones.maf_hr - 20, plan.hr_zones.maf_hr - 10),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Zone 2: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{}-{}", plan.hr_zones.maf_hr - 10, plan.hr_zones.maf_hr),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]),
-    ];
+    // Render summary panel (left)
+    render_summary_panel(frame, app, plan, chunks[0]);
 
-    // Show status message if any
+    // Render weeks panel (right)
+    render_weeks_panel(frame, app, plan, chunks[1]);
+}
+
+fn render_summary_panel(
+    frame: &mut Frame,
+    app: &App,
+    plan: &crate::models::TrainingPlan,
+    area: Rect,
+) {
+    let is_focused = app.plan_focus == PlanFocus::Summary;
+
+    let border_style = if is_focused {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
+    let mut lines = vec![];
+
+    // Age field
+    let age_selected = is_focused && app.selected_summary_field == SummaryField::Age;
+    lines.push(create_field_line(
+        "Age:",
+        &format!("{}", app.age),
+        age_selected,
+    ));
+
+    lines.push(Line::from(""));
+
+    // Target Distance field
+    let distance_selected = is_focused && app.selected_summary_field == SummaryField::Distance;
+    lines.push(create_field_line(
+        "Target:",
+        plan.profile.target_distance.name(),
+        distance_selected,
+    ));
+
+    // Race Type field
+    let race_type_selected = is_focused && app.selected_summary_field == SummaryField::RaceType;
+    lines.push(create_field_line(
+        "Type:",
+        plan.profile.race_type.name(),
+        race_type_selected,
+    ));
+
+    // Workouts per Week field
+    let workouts_selected =
+        is_focused && app.selected_summary_field == SummaryField::WorkoutsPerWeek;
+    lines.push(create_field_line(
+        "Workouts/week:",
+        &format!("{}", app.selected_workouts_per_week),
+        workouts_selected,
+    ));
+
+    lines.push(Line::from(""));
+
+    // Duration (read-only, derived from distance)
+    lines.push(Line::from(vec![
+        Span::styled("   Duration: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("{} weeks", plan.weeks.len()),
+            Style::default().fg(Color::Cyan),
+        ),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // Heart Rate Zones (read-only, derived from age)
+    lines.push(Line::from(Span::styled(
+        "   Heart Rate Zones",
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(vec![
+        Span::styled("   MAF: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("{} bpm", plan.hr_zones.maf_hr),
+            Style::default().fg(Color::Cyan),
+        ),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("   Zone 1: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!(
+                "{}-{}",
+                plan.hr_zones.maf_hr - 20,
+                plan.hr_zones.maf_hr - 10
+            ),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("   Zone 2: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("{}-{}", plan.hr_zones.maf_hr - 10, plan.hr_zones.maf_hr),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
+
+    // Status message if any
     if let Some((msg, is_error)) = &app.status_message {
-        summary.push(Line::from(Span::styled(
-            msg.clone(),
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("   {}", msg),
             Style::default().fg(if *is_error { Color::Red } else { Color::Green }),
         )));
     }
 
-    let summary_widget = Paragraph::new(summary).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Training Plan Summary"),
-    );
-    frame.render_widget(summary_widget, chunks[0]);
+    let title = if is_focused {
+        "Settings [editing]"
+    } else {
+        "Settings"
+    };
 
-    // Week details
-    if let Some(week) = plan.weeks.get(app.selected_week) {
-        let phase_color = match week.phase {
-            TrainingPhase::Base => Color::Blue,
-            TrainingPhase::Build => Color::Yellow,
-            TrainingPhase::Peak => Color::Red,
-            TrainingPhase::Taper => Color::Green,
-        };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .border_style(border_style);
 
-        let mut week_content = vec![
-            Line::from(vec![
-                Span::styled(
-                    format!("Week {} of {} - ", week.week_number, plan.weeks.len()),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    week.phase.name(),
-                    Style::default()
-                        .fg(phase_color)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    format!(" | Total: {} min", week.total_volume_minutes),
-                    Style::default().fg(Color::Gray),
-                ),
-            ]),
-            Line::from(""),
-        ];
+    let summary_widget = Paragraph::new(lines).block(block);
+    frame.render_widget(summary_widget, area);
+}
 
-        for (i, workout) in week.workouts.iter().enumerate() {
-            if workout.duration_minutes == 0 {
-                continue; // Skip rest days in compact view
-            }
+/// Helper to create a field line with selection highlighting
+fn create_field_line(label: &str, value: &str, is_selected: bool) -> Line<'static> {
+    let prefix = if is_selected { " > " } else { "   " };
+    let value_style = if is_selected {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White)
+    };
 
-            let is_selected = i == app.selected_workout;
-            let prefix = if is_selected { "> " } else { "  " };
-            let workout_style = if is_selected {
+    Line::from(vec![
+        Span::styled(prefix.to_string(), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("{} ", label), Style::default().fg(Color::Gray)),
+        Span::styled(value.to_string(), value_style),
+    ])
+}
+
+fn render_weeks_panel(
+    frame: &mut Frame,
+    app: &App,
+    plan: &crate::models::TrainingPlan,
+    area: Rect,
+) {
+    let is_focused = app.plan_focus == PlanFocus::Weeks;
+
+    let border_style = if is_focused {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
+    let Some(week) = plan.weeks.get(app.selected_week) else {
+        return;
+    };
+
+    let phase_color = match week.phase {
+        TrainingPhase::Base => Color::Blue,
+        TrainingPhase::Build => Color::Yellow,
+        TrainingPhase::Peak => Color::Red,
+        TrainingPhase::Taper => Color::Green,
+    };
+
+    let mut week_content = vec![
+        Line::from(vec![
+            Span::styled(
+                format!("Week {} of {} - ", week.week_number, plan.weeks.len()),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                week.phase.name(),
                 Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
+                    .fg(phase_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(" | Total: {} min", week.total_volume_minutes),
+                Style::default().fg(Color::Gray),
+            ),
+        ]),
+        Line::from(""),
+    ];
 
-            week_content.push(Line::from(vec![
-                Span::styled(prefix, Style::default().fg(Color::Yellow)),
-                Span::styled(
-                    format!("Day {}: ", i + 1),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::styled(format!("{} ", workout.workout_type.name()), workout_style),
-                Span::styled(
-                    format!("({} min)", workout.duration_minutes),
-                    Style::default().fg(Color::Cyan),
-                ),
-            ]));
-
-            // Wrap description
-            let desc_lines = wrap_text(
-                &workout.description,
-                (area.width as usize).saturating_sub(10),
-            );
-            let desc_style = if is_selected {
-                Style::default().fg(Color::White)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            };
-            for line in desc_lines {
-                week_content.push(Line::from(Span::styled(
-                    format!("         {}", line),
-                    desc_style,
-                )));
-            }
-            week_content.push(Line::from(""));
+    for (i, workout) in week.workouts.iter().enumerate() {
+        if workout.duration_minutes == 0 {
+            continue; // Skip rest days in compact view
         }
 
-        // Add navigation hint
-        week_content.push(Line::from(Span::styled(
-            format!(
-                "Week {}/{} | Press 'e' to edit selected workout, 's' to save, 'l' to load",
-                app.selected_week + 1,
-                plan.weeks.len()
-            ),
+        let is_selected = is_focused && i == app.selected_workout;
+        let prefix = if is_selected { "> " } else { "  " };
+        let workout_style = if is_selected {
             Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::ITALIC),
-        )));
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
 
-        let week_widget = Paragraph::new(week_content)
-            .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title("Week Details"));
-        frame.render_widget(week_widget, chunks[1]);
+        week_content.push(Line::from(vec![
+            Span::styled(prefix, Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("Day {}: ", i + 1),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(format!("{} ", workout.workout_type.name()), workout_style),
+            Span::styled(
+                format!("({} min)", workout.duration_minutes),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]));
+
+        // Wrap description
+        let desc_lines = wrap_text(
+            &workout.description,
+            (area.width as usize).saturating_sub(10),
+        );
+        let desc_style = if is_selected {
+            Style::default().fg(Color::White)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        for line in desc_lines {
+            week_content.push(Line::from(Span::styled(
+                format!("         {}", line),
+                desc_style,
+            )));
+        }
+        week_content.push(Line::from(""));
     }
+
+    let title = if is_focused {
+        "Week Details [navigating]"
+    } else {
+        "Week Details"
+    };
+
+    let week_widget = Paragraph::new(week_content)
+        .wrap(Wrap { trim: true })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .border_style(border_style),
+        );
+    frame.render_widget(week_widget, area);
 }
 
 fn wrap_text(text: &str, max_width: usize) -> Vec<String> {

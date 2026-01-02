@@ -13,7 +13,7 @@ use crossterm::{
 };
 use ratatui::prelude::*;
 
-use app::{App, Screen};
+use app::{App, PlanFocus, Screen};
 
 fn main() -> io::Result<()> {
     // Setup terminal
@@ -55,11 +55,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                 }
 
                 match app.screen {
-                    Screen::Welcome => handle_welcome_input(app, key.code),
-                    Screen::AgeInput => handle_age_input(app, key.code),
-                    Screen::DistanceSelect => handle_distance_input(app, key.code),
-                    Screen::RaceTypeSelect => handle_race_type_input(app, key.code),
-                    Screen::WorkoutsPerWeekSelect => handle_workouts_input(app, key.code),
                     Screen::PlanView => handle_plan_view_input(app, key.code),
                     Screen::SavePlan => handle_save_input(app, key.code),
                     Screen::LoadPlan => handle_load_input(app, key.code),
@@ -74,80 +69,45 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
     }
 }
 
-fn handle_welcome_input(app: &mut App, key: KeyCode) {
-    match key {
-        KeyCode::Enter => app.next_screen(),
-        KeyCode::Char('l') | KeyCode::Char('L') => app.go_to_load(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
-        KeyCode::Esc => app.should_quit = true,
-        _ => {}
-    }
-}
-
-fn handle_age_input(app: &mut App, key: KeyCode) {
-    match key {
-        KeyCode::Char(c) if c.is_ascii_digit() => {
-            if app.age_input.len() < 3 {
-                app.age_input.push(c);
-            }
-        }
-        KeyCode::Backspace => {
-            app.age_input.pop();
-        }
-        KeyCode::Enter => {
-            if !app.age_input.is_empty() {
-                app.next_screen();
-            }
-        }
-        KeyCode::Esc => app.previous_screen(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
-        _ => {}
-    }
-}
-
-fn handle_distance_input(app: &mut App, key: KeyCode) {
-    match key {
-        KeyCode::Up | KeyCode::Char('k') => app.select_prev_distance(),
-        KeyCode::Down | KeyCode::Char('j') => app.select_next_distance(),
-        KeyCode::Enter => app.next_screen(),
-        KeyCode::Esc => app.previous_screen(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
-        _ => {}
-    }
-}
-
-fn handle_race_type_input(app: &mut App, key: KeyCode) {
-    match key {
-        KeyCode::Up | KeyCode::Char('k') => app.select_prev_race_type(),
-        KeyCode::Down | KeyCode::Char('j') => app.select_next_race_type(),
-        KeyCode::Enter => app.next_screen(),
-        KeyCode::Esc => app.previous_screen(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
-        _ => {}
-    }
-}
-
-fn handle_workouts_input(app: &mut App, key: KeyCode) {
-    match key {
-        KeyCode::Up | KeyCode::Char('k') => app.increase_workouts(),
-        KeyCode::Down | KeyCode::Char('j') => app.decrease_workouts(),
-        KeyCode::Enter => app.next_screen(),
-        KeyCode::Esc => app.previous_screen(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
-        _ => {}
-    }
-}
-
 fn handle_plan_view_input(app: &mut App, key: KeyCode) {
+    match key {
+        // Global keys
+        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
+        KeyCode::Char('s') | KeyCode::Char('S') => app.go_to_save(),
+        KeyCode::Char('l') | KeyCode::Char('L') => app.go_to_load(),
+
+        // Tab switches focus between panels
+        KeyCode::Tab => app.toggle_focus(),
+
+        // Panel-specific handling
+        _ => match app.plan_focus {
+            PlanFocus::Summary => handle_summary_input(app, key),
+            PlanFocus::Weeks => handle_weeks_input(app, key),
+        },
+    }
+}
+
+fn handle_summary_input(app: &mut App, key: KeyCode) {
+    match key {
+        // Navigate between fields
+        KeyCode::Up | KeyCode::Char('k') => app.select_prev_summary_field(),
+        KeyCode::Down | KeyCode::Char('j') => app.select_next_summary_field(),
+
+        // Modify selected field value
+        KeyCode::Left | KeyCode::Char('h') => app.decrement_summary_field(),
+        KeyCode::Right => app.increment_summary_field(),
+
+        _ => {}
+    }
+}
+
+fn handle_weeks_input(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Up | KeyCode::Char('k') => app.scroll_plan_up(),
         KeyCode::Down | KeyCode::Char('j') => app.scroll_plan_down(),
         KeyCode::Left | KeyCode::Char('h') => app.select_prev_workout(),
         KeyCode::Right | KeyCode::Char('l') => app.select_next_workout(),
         KeyCode::Char('e') | KeyCode::Char('E') => app.go_to_edit(),
-        KeyCode::Char('s') | KeyCode::Char('S') => app.go_to_save(),
-        KeyCode::Esc => app.previous_screen(),
-        KeyCode::Char('q') | KeyCode::Char('Q') => app.should_quit = true,
         _ => {}
     }
 }
@@ -163,7 +123,9 @@ fn handle_save_input(app: &mut App, key: KeyCode) {
         KeyCode::Enter => {
             app.save_plan();
         }
-        KeyCode::Esc => app.previous_screen(),
+        KeyCode::Esc => {
+            app.screen = Screen::PlanView;
+        }
         _ => {}
     }
 }
@@ -179,7 +141,9 @@ fn handle_load_input(app: &mut App, key: KeyCode) {
         KeyCode::Enter => {
             app.load_plan();
         }
-        KeyCode::Esc => app.previous_screen(),
+        KeyCode::Esc => {
+            app.screen = Screen::PlanView;
+        }
         _ => {}
     }
 }
@@ -195,7 +159,9 @@ fn handle_edit_input(app: &mut App, key: KeyCode) {
         KeyCode::Enter => {
             app.apply_edit();
         }
-        KeyCode::Esc => app.previous_screen(),
+        KeyCode::Esc => {
+            app.screen = Screen::PlanView;
+        }
         _ => {}
     }
 }

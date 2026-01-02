@@ -346,7 +346,10 @@ mod tests {
     #[test]
     fn test_rpe_description() {
         assert_eq!(RPE::One.description(), "Very light - barely any effort");
-        assert_eq!(RPE::Five.description(), "Hard - can speak in short sentences");
+        assert_eq!(
+            RPE::Five.description(),
+            "Hard - can speak in short sentences"
+        );
         assert_eq!(RPE::Ten.description(), "Maximum effort - all out sprint");
     }
 
