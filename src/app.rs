@@ -35,21 +35,21 @@ pub enum SummaryField {
 impl SummaryField {
     pub fn next(self) -> SummaryField {
         match self {
-            SummaryField::Age => SummaryField::Distance,
+            SummaryField::Age => SummaryField::MafAdjustment,
+            SummaryField::MafAdjustment => SummaryField::Distance,
             SummaryField::Distance => SummaryField::RaceType,
             SummaryField::RaceType => SummaryField::WorkoutsPerWeek,
-            SummaryField::WorkoutsPerWeek => SummaryField::MafAdjustment,
-            SummaryField::MafAdjustment => SummaryField::Age,
+            SummaryField::WorkoutsPerWeek => SummaryField::Age,
         }
     }
 
     pub fn prev(self) -> SummaryField {
         match self {
-            SummaryField::Age => SummaryField::MafAdjustment,
-            SummaryField::Distance => SummaryField::Age,
-            SummaryField::RaceType => SummaryField::Distance,
+            SummaryField::Age => SummaryField::WorkoutsPerWeek,
             SummaryField::WorkoutsPerWeek => SummaryField::RaceType,
-            SummaryField::MafAdjustment => SummaryField::WorkoutsPerWeek,
+            SummaryField::RaceType => SummaryField::Distance,
+            SummaryField::Distance => SummaryField::MafAdjustment,
+            SummaryField::MafAdjustment => SummaryField::Age,
         }
     }
 }
@@ -781,6 +781,9 @@ mod tests {
         assert_eq!(app.selected_summary_field, SummaryField::Age);
 
         app.select_next_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::MafAdjustment);
+
+        app.select_next_summary_field();
         assert_eq!(app.selected_summary_field, SummaryField::Distance);
 
         app.select_next_summary_field();
@@ -790,13 +793,13 @@ mod tests {
         assert_eq!(app.selected_summary_field, SummaryField::WorkoutsPerWeek);
 
         app.select_next_summary_field();
-        assert_eq!(app.selected_summary_field, SummaryField::MafAdjustment);
-
-        app.select_next_summary_field();
         assert_eq!(app.selected_summary_field, SummaryField::Age); // Wraps around
 
         app.select_prev_summary_field();
-        assert_eq!(app.selected_summary_field, SummaryField::MafAdjustment);
+        assert_eq!(app.selected_summary_field, SummaryField::WorkoutsPerWeek);
+
+        app.select_prev_summary_field();
+        assert_eq!(app.selected_summary_field, SummaryField::RaceType);
     }
 
     // Age field editing tests
