@@ -114,6 +114,7 @@ impl RPE {
         }
     }
 
+    #[allow(dead_code)]
     pub fn description(&self) -> &'static str {
         match self {
             RPE::One => "Very light - barely any effort",
@@ -172,6 +173,7 @@ impl MafAdjustment {
         }
     }
 
+    #[allow(dead_code)]
     pub fn description(&self) -> &'static str {
         match self {
             MafAdjustment::MinusTen => {
@@ -209,6 +211,7 @@ impl HeartRateZones {
     }
 
     /// Calculate heart rate zones using Maffetone formula (no adjustment - backward compatible)
+    #[allow(dead_code)]
     pub fn from_age(age: u8) -> Self {
         Self::from_age_with_adjustment(age, MafAdjustment::None)
     }
