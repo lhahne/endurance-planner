@@ -1,6 +1,6 @@
 use crate::models::{
-    Distance, HeartRateZones, RaceType, TrainingPhase, TrainingPlan, TrainingWeek, UserProfile,
-    Workout, WorkoutType,
+    HeartRateZones, RaceType, TrainingPhase, TrainingPlan, TrainingWeek, UserProfile, Workout,
+    WorkoutType,
 };
 use crate::workouts::*;
 
