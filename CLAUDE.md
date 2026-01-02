@@ -136,6 +136,121 @@ This project aims to provide tools and utilities for endurance athletes to plan,
 
 ### Testing Standards
 
+**CRITICAL: Always Use Test-Driven Development (TDD)**
+
+This project **requires** Test-Driven Development using the Red-Green-Refactor cycle for ALL code changes:
+
+#### Red-Green-Refactor Workflow
+
+**🔴 RED - Write a Failing Test**
+1. Before writing any production code, write a test that fails
+2. The test should define the desired behavior
+3. Run `cargo test` to verify the test fails for the right reason
+4. Example:
+   ```rust
+   #[test]
+   fn test_calculate_maf_heart_rate() {
+       let age = 30;
+       let maf_hr = calculate_maf_heart_rate(age);
+       assert_eq!(maf_hr, 150); // 180 - 30 = 150
+   }
+   // This will fail because calculate_maf_heart_rate() doesn't exist yet
+   ```
+
+**🟢 GREEN - Make the Test Pass**
+1. Write the minimal code necessary to make the test pass
+2. Don't worry about perfection - just make it work
+3. Run `cargo test` to verify the test passes
+4. Example:
+   ```rust
+   pub fn calculate_maf_heart_rate(age: u32) -> u32 {
+       180 - age
+   }
+   ```
+
+**🔵 REFACTOR - Improve the Code**
+1. Clean up the code while keeping tests green
+2. Remove duplication
+3. Improve naming and structure
+4. Run `cargo test` frequently to ensure tests still pass
+5. Only refactor when tests are passing
+
+#### TDD Rules - MUST FOLLOW
+
+1. **Never write production code without a failing test first**
+2. **Write only enough test code to make a test fail** (including compilation failures)
+3. **Write only enough production code to make the failing test pass**
+4. **Run tests after every small change** (`cargo test`)
+5. **Commit after each successful Red-Green-Refactor cycle**
+
+#### TDD Benefits in This Project
+
+- **Safety**: Tests catch regressions in workout calculations, heart rate zones, periodization logic
+- **Design**: TDD forces good API design for training plan generation
+- **Documentation**: Tests serve as examples of how to use the code
+- **Confidence**: Refactor UI and logic without fear of breaking functionality
+
+#### When to Write Different Test Types
+
+**Unit Tests (Most Common):**
+- Testing individual functions (e.g., calculate_maf_heart_rate)
+- Testing data model methods (e.g., Distance::to_km)
+- Testing workout generation logic
+- Testing heart rate zone calculations
+
+**Integration Tests:**
+- Testing file I/O operations (save/load markdown)
+- Testing complete training plan generation
+- Testing interactions between modules
+
+**Documentation Tests:**
+- Include examples in public API documentation
+- Show users how to use key functions
+
+#### TDD Example Workflow
+
+```rust
+// 1. RED: Write failing test
+#[test]
+fn test_generate_base_phase_workout() {
+    let workout = generate_base_phase_workout(Distance::Marathon, RaceType::Road, 1);
+    assert_eq!(workout.workout_type, WorkoutType::EasyRun);
+    assert!(workout.duration_minutes > 0);
+}
+// Run: cargo test -> FAILS (function doesn't exist)
+
+// 2. GREEN: Minimal implementation
+pub fn generate_base_phase_workout(
+    distance: Distance,
+    race_type: RaceType,
+    week: u32
+) -> Workout {
+    Workout {
+        workout_type: WorkoutType::EasyRun,
+        duration_minutes: 30,
+        description: String::from("Easy run"),
+    }
+}
+// Run: cargo test -> PASSES
+
+// 3. REFACTOR: Improve implementation
+pub fn generate_base_phase_workout(
+    distance: Distance,
+    race_type: RaceType,
+    week: u32
+) -> Workout {
+    let duration = calculate_base_duration(distance, week);
+    Workout {
+        workout_type: WorkoutType::EasyRun,
+        duration_minutes: duration,
+        description: format!("Easy run - building base for {:?}", distance),
+    }
+}
+// Run: cargo test -> STILL PASSES
+
+// 4. Commit with message: "feat: Add base phase workout generation"
+```
+
 **Rust Testing Patterns:**
 
 1. **Unit Tests:**
@@ -499,6 +614,12 @@ pub fn render_component(frame: &mut Frame, area: Rect, state: &ComponentState) {
 - ❌ Using bash for file operations
 
 ## Changelog
+
+### 2026-01-02
+- **Added Test-Driven Development (TDD) requirements**
+- Documented Red-Green-Refactor workflow
+- Added TDD rules and best practices
+- Included comprehensive TDD example workflow
 
 ### 2026-01-01
 - Initial CLAUDE.md creation

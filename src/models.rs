@@ -271,6 +271,86 @@ pub struct TrainingPlan {
 mod tests {
     use super::*;
 
+    // Distance tests
+    #[test]
+    fn test_distance_all() {
+        let distances = Distance::all();
+        assert_eq!(distances.len(), 7);
+        assert_eq!(distances[0], Distance::FiveK);
+        assert_eq!(distances[6], Distance::HundredMiles);
+    }
+
+    #[test]
+    fn test_distance_name() {
+        assert_eq!(Distance::FiveK.name(), "5K");
+        assert_eq!(Distance::TenK.name(), "10K");
+        assert_eq!(Distance::HalfMarathon.name(), "Half Marathon (21.1K)");
+        assert_eq!(Distance::Marathon.name(), "Marathon (42.2K)");
+        assert_eq!(Distance::FiftyK.name(), "50K Ultra");
+        assert_eq!(Distance::HundredK.name(), "100K Ultra");
+        assert_eq!(Distance::HundredMiles.name(), "100 Miles Ultra");
+    }
+
+    #[test]
+    fn test_distance_plan_weeks() {
+        assert_eq!(Distance::FiveK.plan_weeks(), 8);
+        assert_eq!(Distance::TenK.plan_weeks(), 10);
+        assert_eq!(Distance::HalfMarathon.plan_weeks(), 12);
+        assert_eq!(Distance::Marathon.plan_weeks(), 16);
+        assert_eq!(Distance::FiftyK.plan_weeks(), 16);
+        assert_eq!(Distance::HundredK.plan_weeks(), 20);
+        assert_eq!(Distance::HundredMiles.plan_weeks(), 24);
+    }
+
+    #[test]
+    fn test_distance_kilometers() {
+        assert_eq!(Distance::FiveK.kilometers(), 5.0);
+        assert_eq!(Distance::TenK.kilometers(), 10.0);
+        assert_eq!(Distance::HalfMarathon.kilometers(), 21.1);
+        assert_eq!(Distance::Marathon.kilometers(), 42.2);
+        assert_eq!(Distance::FiftyK.kilometers(), 50.0);
+        assert_eq!(Distance::HundredK.kilometers(), 100.0);
+        assert_eq!(Distance::HundredMiles.kilometers(), 160.9);
+    }
+
+    // RaceType tests
+    #[test]
+    fn test_race_type_all() {
+        let types = RaceType::all();
+        assert_eq!(types.len(), 2);
+        assert_eq!(types[0], RaceType::Road);
+        assert_eq!(types[1], RaceType::Trail);
+    }
+
+    #[test]
+    fn test_race_type_name() {
+        assert_eq!(RaceType::Road.name(), "Road");
+        assert_eq!(RaceType::Trail.name(), "Trail");
+    }
+
+    // RPE tests
+    #[test]
+    fn test_rpe_value() {
+        assert_eq!(RPE::One.value(), 1);
+        assert_eq!(RPE::Two.value(), 2);
+        assert_eq!(RPE::Three.value(), 3);
+        assert_eq!(RPE::Four.value(), 4);
+        assert_eq!(RPE::Five.value(), 5);
+        assert_eq!(RPE::Six.value(), 6);
+        assert_eq!(RPE::Seven.value(), 7);
+        assert_eq!(RPE::Eight.value(), 8);
+        assert_eq!(RPE::Nine.value(), 9);
+        assert_eq!(RPE::Ten.value(), 10);
+    }
+
+    #[test]
+    fn test_rpe_description() {
+        assert_eq!(RPE::One.description(), "Very light - barely any effort");
+        assert_eq!(RPE::Five.description(), "Hard - can speak in short sentences");
+        assert_eq!(RPE::Ten.description(), "Maximum effort - all out sprint");
+    }
+
+    // HeartRateZones tests
     #[test]
     fn test_maffetone_calculation() {
         let zones = HeartRateZones::from_age(40);
@@ -280,8 +360,91 @@ mod tests {
     }
 
     #[test]
-    fn test_distance_plan_weeks() {
-        assert_eq!(Distance::FiveK.plan_weeks(), 8);
-        assert_eq!(Distance::Marathon.plan_weeks(), 16);
+    fn test_maffetone_young_athlete() {
+        let zones = HeartRateZones::from_age(25);
+        assert_eq!(zones.maf_hr, 155); // 180 - 25
+    }
+
+    #[test]
+    fn test_maffetone_older_athlete() {
+        let zones = HeartRateZones::from_age(60);
+        assert_eq!(zones.maf_hr, 120); // 180 - 60
+    }
+
+    #[test]
+    fn test_zone1_range() {
+        let zones = HeartRateZones::from_age(40);
+        let (min, max) = zones.zone1_range();
+        assert_eq!(min, 120); // MAF - 20
+        assert_eq!(max, 130); // MAF - 10
+    }
+
+    #[test]
+    fn test_zone2_range() {
+        let zones = HeartRateZones::from_age(40);
+        let (min, max) = zones.zone2_range();
+        assert_eq!(min, 131); // zone1_max + 1
+        assert_eq!(max, 140); // MAF
+    }
+
+    #[test]
+    fn test_heart_rate_zones_edge_case_very_young() {
+        let zones = HeartRateZones::from_age(10);
+        assert_eq!(zones.maf_hr, 170);
+        let (z1_min, z1_max) = zones.zone1_range();
+        assert_eq!(z1_min, 150);
+        assert_eq!(z1_max, 160);
+    }
+
+    // WorkoutType tests
+    #[test]
+    fn test_workout_type_name() {
+        assert_eq!(WorkoutType::EasyRun.name(), "Easy Run");
+        assert_eq!(WorkoutType::LongRun.name(), "Long Run");
+        assert_eq!(WorkoutType::RecoveryRun.name(), "Recovery Run");
+        assert_eq!(WorkoutType::Rest.name(), "Rest");
+        assert_eq!(
+            WorkoutType::Intervals {
+                reps: 5,
+                work_minutes: 4,
+                rest_minutes: 2,
+                target_rpe: RPE::Seven
+            }
+            .name(),
+            "Intervals"
+        );
+        assert_eq!(
+            WorkoutType::TempoRun {
+                duration_minutes: 20,
+                target_rpe: RPE::Six
+            }
+            .name(),
+            "Tempo Run"
+        );
+        assert_eq!(
+            WorkoutType::HillRepeats {
+                reps: 6,
+                target_rpe: RPE::Eight
+            }
+            .name(),
+            "Hill Repeats"
+        );
+        assert_eq!(WorkoutType::TechnicalTrail.name(), "Technical Trail");
+        assert_eq!(
+            WorkoutType::VerticalTraining {
+                elevation_gain_meters: 500
+            }
+            .name(),
+            "Vertical Training"
+        );
+    }
+
+    // TrainingPhase tests
+    #[test]
+    fn test_training_phase_name() {
+        assert_eq!(TrainingPhase::Base.name(), "Base Building");
+        assert_eq!(TrainingPhase::Build.name(), "Build Phase");
+        assert_eq!(TrainingPhase::Peak.name(), "Peak Training");
+        assert_eq!(TrainingPhase::Taper.name(), "Taper");
     }
 }

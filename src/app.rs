@@ -337,7 +337,7 @@ fn generate_training_weeks(
     let base_weeks = (total_weeks as f32 * 0.4).ceil() as u8;
     let build_weeks = (total_weeks as f32 * 0.3).ceil() as u8;
     let peak_weeks = (total_weeks as f32 * 0.2).ceil() as u8;
-    let _taper_weeks = total_weeks - base_weeks - build_weeks - peak_weeks;
+    let _taper_weeks = total_weeks.saturating_sub(base_weeks).saturating_sub(build_weeks).saturating_sub(peak_weeks);
 
     for week_num in 1..=total_weeks {
         let phase = if week_num <= base_weeks {
@@ -625,6 +625,7 @@ fn create_vertical_training(distance: Distance) -> Workout {
 mod tests {
     use super::*;
 
+    // App creation tests
     #[test]
     fn test_app_creation() {
         let app = App::new();
@@ -632,6 +633,160 @@ mod tests {
         assert!(!app.should_quit);
     }
 
+    #[test]
+    fn test_app_default() {
+        let app = App::default();
+        assert_eq!(app.screen, Screen::Welcome);
+        assert_eq!(app.selected_workouts_per_week, 4);
+    }
+
+    // Age validation tests
+    #[test]
+    fn test_validate_age_valid() {
+        let mut app = App::new();
+        app.age_input = "30".to_string();
+        assert_eq!(app.get_age(), 30);
+    }
+
+    #[test]
+    fn test_validate_age_too_young() {
+        let mut app = App::new();
+        app.age_input = "9".to_string();
+        app.screen = Screen::AgeInput;
+        app.next_screen();
+        assert_eq!(app.screen, Screen::AgeInput); // Should stay on age input
+    }
+
+    #[test]
+    fn test_validate_age_too_old() {
+        let mut app = App::new();
+        app.age_input = "101".to_string();
+        app.screen = Screen::AgeInput;
+        app.next_screen();
+        assert_eq!(app.screen, Screen::AgeInput); // Should stay on age input
+    }
+
+    #[test]
+    fn test_validate_age_invalid() {
+        let mut app = App::new();
+        app.age_input = "invalid".to_string();
+        app.screen = Screen::AgeInput;
+        app.next_screen();
+        assert_eq!(app.screen, Screen::AgeInput); // Should stay on age input
+    }
+
+    #[test]
+    fn test_get_age_default() {
+        let app = App::new();
+        assert_eq!(app.get_age(), 30); // Default when parse fails
+    }
+
+    // Distance selection tests
+    #[test]
+    fn test_selected_distance() {
+        let mut app = App::new();
+        app.selected_distance_index = 0;
+        assert_eq!(app.selected_distance(), Distance::FiveK);
+
+        app.selected_distance_index = 3;
+        assert_eq!(app.selected_distance(), Distance::Marathon);
+    }
+
+    #[test]
+    fn test_select_next_distance() {
+        let mut app = App::new();
+        app.selected_distance_index = 0;
+
+        app.select_next_distance();
+        assert_eq!(app.selected_distance_index, 1);
+
+        // Test wrap-around
+        app.selected_distance_index = 6;
+        app.select_next_distance();
+        assert_eq!(app.selected_distance_index, 0);
+    }
+
+    #[test]
+    fn test_select_prev_distance() {
+        let mut app = App::new();
+        app.selected_distance_index = 1;
+
+        app.select_prev_distance();
+        assert_eq!(app.selected_distance_index, 0);
+
+        // Test wrap-around
+        app.selected_distance_index = 0;
+        app.select_prev_distance();
+        assert_eq!(app.selected_distance_index, 6);
+    }
+
+    // Race type selection tests
+    #[test]
+    fn test_selected_race_type() {
+        let mut app = App::new();
+        app.selected_race_type_index = 0;
+        assert_eq!(app.selected_race_type(), RaceType::Road);
+
+        app.selected_race_type_index = 1;
+        assert_eq!(app.selected_race_type(), RaceType::Trail);
+    }
+
+    #[test]
+    fn test_select_next_race_type() {
+        let mut app = App::new();
+        app.selected_race_type_index = 0;
+
+        app.select_next_race_type();
+        assert_eq!(app.selected_race_type_index, 1);
+
+        // Test wrap-around
+        app.select_next_race_type();
+        assert_eq!(app.selected_race_type_index, 0);
+    }
+
+    #[test]
+    fn test_select_prev_race_type() {
+        let mut app = App::new();
+        app.selected_race_type_index = 1;
+
+        app.select_prev_race_type();
+        assert_eq!(app.selected_race_type_index, 0);
+
+        // Test wrap-around
+        app.select_prev_race_type();
+        assert_eq!(app.selected_race_type_index, 1);
+    }
+
+    // Workouts per week tests
+    #[test]
+    fn test_increase_workouts() {
+        let mut app = App::new();
+        app.selected_workouts_per_week = 4;
+
+        app.increase_workouts();
+        assert_eq!(app.selected_workouts_per_week, 5);
+
+        // Test upper limit
+        app.selected_workouts_per_week = 7;
+        app.increase_workouts();
+        assert_eq!(app.selected_workouts_per_week, 7);
+    }
+
+    #[test]
+    fn test_decrease_workouts() {
+        let mut app = App::new();
+        app.selected_workouts_per_week = 4;
+
+        app.decrease_workouts();
+        assert_eq!(app.selected_workouts_per_week, 3);
+
+        // Test lower limit
+        app.selected_workouts_per_week = 2;
+        app.decrease_workouts();
+        assert_eq!(app.selected_workouts_per_week, 2);
+    }
+
+    // Screen navigation tests
     #[test]
     fn test_screen_navigation() {
         let mut app = App::new();
@@ -644,6 +799,23 @@ mod tests {
         assert_eq!(app.screen, Screen::DistanceSelect);
     }
 
+    #[test]
+    fn test_previous_screen() {
+        let mut app = App::new();
+        app.screen = Screen::DistanceSelect;
+
+        app.previous_screen();
+        assert_eq!(app.screen, Screen::AgeInput);
+
+        app.previous_screen();
+        assert_eq!(app.screen, Screen::Welcome);
+
+        // Test staying at welcome
+        app.previous_screen();
+        assert_eq!(app.screen, Screen::Welcome);
+    }
+
+    // Plan generation tests
     #[test]
     fn test_plan_generation() {
         let mut app = App::new();
@@ -659,5 +831,237 @@ mod tests {
         let plan = app.training_plan.as_ref().unwrap();
         assert_eq!(plan.weeks.len(), 16); // Marathon = 16 weeks
         assert_eq!(plan.hr_zones.maf_hr, 145); // 180 - 35
+    }
+
+    #[test]
+    fn test_plan_generation_trail() {
+        let mut app = App::new();
+        app.age_input = "40".to_string();
+        app.selected_distance_index = 4; // 50K
+        app.selected_race_type_index = 1; // Trail
+        app.selected_workouts_per_week = 4;
+
+        app.screen = Screen::WorkoutsPerWeekSelect;
+        app.next_screen();
+
+        let plan = app.training_plan.as_ref().unwrap();
+        assert_eq!(plan.profile.race_type, RaceType::Trail);
+        assert_eq!(plan.weeks.len(), 16); // 50K = 16 weeks
+    }
+
+    // Plan view navigation tests
+    #[test]
+    fn test_scroll_plan_down() {
+        let mut app = App::new();
+        app.age_input = "30".to_string();
+        app.selected_distance_index = 0; // 5K
+        app.selected_workouts_per_week = 4;
+
+        app.screen = Screen::WorkoutsPerWeekSelect;
+        app.next_screen();
+
+        assert_eq!(app.selected_week, 0);
+
+        app.scroll_plan_down();
+        assert_eq!(app.selected_week, 1);
+    }
+
+    #[test]
+    fn test_scroll_plan_up() {
+        let mut app = App::new();
+        app.age_input = "30".to_string();
+        app.selected_distance_index = 0; // 5K
+        app.selected_workouts_per_week = 4;
+
+        app.screen = Screen::WorkoutsPerWeekSelect;
+        app.next_screen();
+
+        app.selected_week = 2;
+        app.scroll_plan_up();
+        assert_eq!(app.selected_week, 1);
+
+        // Test lower limit
+        app.selected_week = 0;
+        app.scroll_plan_up();
+        assert_eq!(app.selected_week, 0);
+    }
+
+    // Workout helper function tests
+    #[test]
+    fn test_create_easy_run() {
+        let hr_zones = HeartRateZones::from_age(40);
+        let workout = create_easy_run(&hr_zones, 45);
+
+        assert_eq!(workout.workout_type, WorkoutType::EasyRun);
+        assert_eq!(workout.duration_minutes, 45);
+        assert!(workout.description.contains("MAF HR"));
+    }
+
+    #[test]
+    fn test_create_long_run() {
+        let hr_zones = HeartRateZones::from_age(40);
+        let workout = create_long_run(&hr_zones, 90, TrainingPhase::Base, false);
+
+        assert_eq!(workout.workout_type, WorkoutType::LongRun);
+        assert_eq!(workout.duration_minutes, 90);
+    }
+
+    #[test]
+    fn test_create_long_run_trail() {
+        let hr_zones = HeartRateZones::from_age(40);
+        let workout = create_long_run(&hr_zones, 90, TrainingPhase::Base, true);
+
+        assert!(workout.description.contains("varied terrain"));
+    }
+
+    #[test]
+    fn test_create_long_run_taper() {
+        let hr_zones = HeartRateZones::from_age(40);
+        let workout = create_long_run(&hr_zones, 60, TrainingPhase::Taper, false);
+
+        assert!(workout.description.contains("staying fresh"));
+    }
+
+    #[test]
+    fn test_create_recovery_run() {
+        let hr_zones = HeartRateZones::from_age(40);
+        let workout = create_recovery_run(&hr_zones);
+
+        assert_eq!(workout.workout_type, WorkoutType::RecoveryRun);
+        assert_eq!(workout.duration_minutes, 20);
+    }
+
+    #[test]
+    fn test_create_intervals_build_phase() {
+        let workout = create_intervals(TrainingPhase::Build);
+
+        match workout.workout_type {
+            WorkoutType::Intervals { reps, work_minutes, rest_minutes, target_rpe } => {
+                assert_eq!(reps, 4);
+                assert_eq!(work_minutes, 3);
+                assert_eq!(rest_minutes, 2);
+                assert_eq!(target_rpe, RPE::Seven);
+            }
+            _ => panic!("Expected Intervals workout type"),
+        }
+    }
+
+    #[test]
+    fn test_create_intervals_peak_phase() {
+        let workout = create_intervals(TrainingPhase::Peak);
+
+        match workout.workout_type {
+            WorkoutType::Intervals { reps, .. } => {
+                assert_eq!(reps, 5);
+            }
+            _ => panic!("Expected Intervals workout type"),
+        }
+    }
+
+    #[test]
+    fn test_create_tempo_run() {
+        let workout = create_tempo_run(40);
+
+        match workout.workout_type {
+            WorkoutType::TempoRun { duration_minutes, target_rpe } => {
+                assert_eq!(duration_minutes, 24); // 40 * 0.6
+                assert_eq!(target_rpe, RPE::Six);
+            }
+            _ => panic!("Expected TempoRun workout type"),
+        }
+        assert_eq!(workout.duration_minutes, 40);
+    }
+
+    #[test]
+    fn test_create_hill_repeats() {
+        let workout = create_hill_repeats();
+
+        match workout.workout_type {
+            WorkoutType::HillRepeats { reps, target_rpe } => {
+                assert_eq!(reps, 6);
+                assert_eq!(target_rpe, RPE::Eight);
+            }
+            _ => panic!("Expected HillRepeats workout type"),
+        }
+        assert_eq!(workout.duration_minutes, 40);
+    }
+
+    #[test]
+    fn test_create_technical_trail() {
+        let hr_zones = HeartRateZones::from_age(40);
+        let workout = create_technical_trail(&hr_zones, 50);
+
+        assert_eq!(workout.workout_type, WorkoutType::TechnicalTrail);
+        assert_eq!(workout.duration_minutes, 50);
+    }
+
+    #[test]
+    fn test_create_vertical_training() {
+        let workout = create_vertical_training(Distance::HundredK);
+
+        match workout.workout_type {
+            WorkoutType::VerticalTraining { elevation_gain_meters } => {
+                assert_eq!(elevation_gain_meters, 800);
+            }
+            _ => panic!("Expected VerticalTraining workout type"),
+        }
+    }
+
+    #[test]
+    fn test_create_vertical_training_hundred_miles() {
+        let workout = create_vertical_training(Distance::HundredMiles);
+
+        match workout.workout_type {
+            WorkoutType::VerticalTraining { elevation_gain_meters } => {
+                assert_eq!(elevation_gain_meters, 1000);
+            }
+            _ => panic!("Expected VerticalTraining workout type"),
+        }
+    }
+
+    // Training week generation tests
+    #[test]
+    fn test_generate_training_weeks_periodization() {
+        let profile = UserProfile {
+            age: 30,
+            target_distance: Distance::Marathon,
+            race_type: RaceType::Road,
+            workouts_per_week: 5,
+        };
+        let hr_zones = HeartRateZones::from_age(30);
+        let weeks = generate_training_weeks(&profile, &hr_zones, 16);
+
+        assert_eq!(weeks.len(), 16);
+
+        // Check phase distribution (40% base, 30% build, 20% peak, remaining taper)
+        let base_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Base).count();
+        let build_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Build).count();
+        let peak_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Peak).count();
+        let taper_count = weeks.iter().filter(|w| w.phase == TrainingPhase::Taper).count();
+
+        // Verify phases are present and in expected proportions
+        assert!(base_count >= 5); // Roughly 40% of 16 = 6.4 -> ceil = 7
+        assert!(build_count >= 4); // Roughly 30% of 16 = 4.8 -> ceil = 5
+        assert!(peak_count >= 3); // Roughly 20% of 16 = 3.2 -> ceil = 4
+        // Taper might be 0 due to ceiling operations
+        assert_eq!(base_count + build_count + peak_count + taper_count, 16);
+    }
+
+    #[test]
+    fn test_generate_training_weeks_has_workouts() {
+        let profile = UserProfile {
+            age: 35,
+            target_distance: Distance::HalfMarathon,
+            race_type: RaceType::Road,
+            workouts_per_week: 4,
+        };
+        let hr_zones = HeartRateZones::from_age(35);
+        let weeks = generate_training_weeks(&profile, &hr_zones, 12);
+
+        // Each week should have 7 days (workouts + rest)
+        for week in weeks {
+            assert_eq!(week.workouts.len(), 7);
+            assert!(week.total_volume_minutes > 0);
+        }
     }
 }
